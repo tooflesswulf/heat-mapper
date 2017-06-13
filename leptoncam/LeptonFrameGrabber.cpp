@@ -105,7 +105,7 @@ void LeptonFrameGrabber::performFFC() {
         //lepton_perform_ffc();
 }
 
-void LeptonFrameGrabber::initiateSinglePoll() 					{
+void LeptonFrameGrabber::initiateSinglePoll() {
 	MarkovScopedMutexGuard msg(leptonMutex);
 	singleLeptonPoll = true;
 	pthread_cond_signal( &leptonCond );
@@ -205,8 +205,11 @@ void LeptonFrameGrabber::leptonFrameGrabberThread(void)
 
 		// We just grabbed a frame. Put it in the outgoing Image Queue.
 		if (chksum != lastChksum ) {
+			lwirImg.img = &frame[0];
+			lptFrame.get()->writeFrame(&lwirImg);
 			//	TODO: Albert, you will need to put this into a queue, or write out to file with a timestamp here...
 			// tcpTransport->sendDataThroughPacket( data, (uint16_t)MKV_LEPTON_FRAME_IMG );
+			printf("Wrote a frame?");
 		}
 		if( singleLeptonPoll ) {
 			singleLeptonPoll = false;
@@ -247,6 +250,13 @@ vector<uint16_t> LeptonFrameGrabber::GrabImage()
 		}
 	}
 	printf("done frame\n");
+
+	lwirImg.img = &ret[0];
+	lptFrame.get()->writeFrame(&lwirImg);
+	//	TODO: Albert, you will need to put this into a queue, or write out to file with a timestamp here...
+	// tcpTransport->sendDataThroughPacket( data, (uint16_t)MKV_LEPTON_FRAME_IMG );
+	printf("Wrote a frame?\n");
+
 	return ret;
 }
 
