@@ -4,17 +4,16 @@ INCLUDES = \
 	   -I/usr/include/python2.7 \
 	   -I.. \
 	   -I/usr/include \
-	   -I../leptonSDKEmb32PUB \
 	   -I../muwcomm \
 	   -I../markovtools
 
 LIBS= -L/usr/lib -L/usr/local/lib -L/usr/local/lib64 -L/usr/lib64 \
 	-lstdc++ -L. -L../markovlibs \
-	-lLEPTON_SDK -L/usr/lib/arm-linux-gnueabihf -lpython2.7 \
+	-L/usr/lib/arm-linux-gnueabihf -lpython2.7 \
 	-lboost_python -lboost_numpy -L../muwcomm -lmarkovtools -lpthread
 
 CC=gcc
-CFLAGS=	-g -c $(SHFLAGS) $(INCLUDES) -std=c++14
+CFLAGS=	-g -c $(SHFLAGS) $(INCLUDES) -std=c++14 -DLEPTON3
 SHFLAGS = -fpic
 LDFLAGS= -shared $(LIBS)
 
