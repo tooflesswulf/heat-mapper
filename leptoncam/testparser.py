@@ -1,5 +1,12 @@
 import numpy as np
 import pickle
+import matplotlib.pyplot as plt
+import sys
+
+try:
+	id = int(sys.argv[1])
+except:
+	id = 0
 
 dt = np.dtype( [('w', np.intc),
 				('h', np.intc),
@@ -13,9 +20,19 @@ dt = np.dtype( [('w', np.intc),
 
 a = np.fromfile('Test.dat', dtype=dt)
 
-imgarr = a['img']
+img = a['img'].reshape(-1,120,160)
+# img = img.reshape(100,-1)
+# print(img.shape)
 
-print(imgarr[...,12345])
+threshold = 1000
+to_disp = img[id]
+avg = np.mean(to_disp)
+to_disp[np.abs(to_disp - avg) > threshold] = avg + 999
 
-pickle.dump(imgarr, open('images.p', 'wb'))
-print('written')
+print("Mean value: {}".format(avg))
+
+# print(np.argwhere(np.abs(to_disp - avg) > 1000))
+
+plt.figure("Image number {}".format(id))
+plt.imshow(to_disp - avg)
+plt.show()

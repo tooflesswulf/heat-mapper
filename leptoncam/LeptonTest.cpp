@@ -24,7 +24,7 @@ int main(int argc, char *argv[])
 	for(int i=0;i<100;i++) {
 		vector<uint16_t> img = lfg.GrabImage();
 		// cout << "[\n";
-		std::string sep = "";
+		// std::string sep = "";
 		// fwrite(&img[0], sizeof(uint16_t), sizeof(img), file);
 		// int j = 0;
 		// for (auto pix : img) {
