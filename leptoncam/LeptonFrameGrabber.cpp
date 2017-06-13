@@ -165,7 +165,7 @@ void LeptonFrameGrabber::leptonFrameGrabberThread(void)
 {
 	uint16_t lastChksum = 0;
 	grabLeptonFrame = false;
-	vector<uint8_t> data(IMG_HEIGHT*IMG_WIDTH*2 + 8); // 4600 uint16 words and a double for frame-rate.
+	vector<uint8_t> data(IMG_HEIGHT*IMG_WIDTH + 8); // 4600 uint16 words and a double for frame-rate.
 	framesSinceLastReset = 0;
 	timeWhenLastReset = MarkovTools::TimeTools::getEpochTime();
 	while (!stopRunningLeptonThread)
@@ -202,7 +202,7 @@ void LeptonFrameGrabber::leptonFrameGrabberThread(void)
 		}
 
 		timeOfLastLeptonFrame = MarkovTools::TimeTools::getEpochTime();
-		memcpy(&data[0], (uint8_t*)&frame[0], IMG_HEIGHT*IMG_WIDTH*2);
+		memcpy(&data[0], (uint8_t*)&frame[0], IMG_HEIGHT*IMG_WIDTH);
 		double frameRate = this->getLeptonFrameRate();
 
 		// We just grabbed a frame. Put it in the outgoing Image Queue.
@@ -247,6 +247,7 @@ vector<uint16_t> LeptonFrameGrabber::GrabImage()
 	printf("reading frame\n");
 	if (readframeonce() == SUCCESS_LOCAL) {
 		int *buf = getbuf();
+		// std::cout << "dims" << buf->sequence() << std::endl;
 		for (int i = 0; i < IMG_WIDTH*IMG_HEIGHT; i++) {
 			ret.push_back(buf[i]);
 		}
@@ -260,7 +261,7 @@ vector<uint16_t> LeptonFrameGrabber::GrabImage()
 
 	//	TODO: Albert, you will need to put this into a queue, or write out to file with a timestamp here...
 	// tcpTransport->sendDataThroughPacket( data, (uint16_t)MKV_LEPTON_FRAME_IMG );
-	std::cout << "Wrote a frame?  First pix is " << ret[0] << std::endl;
+	std::cout << "Wrote a frame?  12345th pix is " << ret[12345] << std::endl;
 
 	return ret;
 }

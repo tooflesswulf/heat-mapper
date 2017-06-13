@@ -15,5 +15,7 @@ a = np.fromfile('Test.dat', dtype=dt)
 
 imgarr = a['img']
 
+print(imgarr[...,12345])
+
 pickle.dump(imgarr, open('images.p', 'wb'))
 print('written')
