@@ -1,95 +1,113 @@
 #include "ImageProc.h"
+#include <vector>
 
 /* Found by binary searching on error codes. Sigh. */
-#define LEP_FFC_CMD    0xc
-#define LEP_RAD_UNIT   5
+#define LEP_FFC_CMD 0xc
+#define LEP_RAD_UNIT 5
+#define MAX_RETRIES 2
 
-static char             dev_name[16];
-static int              fd              = -1;
-static struct buffer   *buffers         = NULL;
-static unsigned int     n_buffers       = 0;
+struct buffer {
+	void *start;
+	size_t length;
+};
+static char dev_name[16];
+static int videofd = -1;
+static std::vector<buffer> buffers;
+static unsigned int n_buffers = 0;
+static int waserror;
+static int width;
+static int height;
 
-static int camerabase = -1;
+static bool initmmap(void);
+static bool readframe(uint16_t *out);
+static void reconnect();
 
-static int *rgb = NULL;
-static int *ybuf = NULL;
+/* Log errors, but be _Q_uiet after a while */
+#define QLOGE(...) \
+	do { \
+		/* show the first 10 error logs around an error */ \
+		if (waserror<10) { LOGE(__VA_ARGS__); } \
+		waserror++; \
+	} while (0)
 
-static int yuv_tbl_ready=0;
-static int y1192_tbl[256];
-static int v1634_tbl[256];
-static int v833_tbl[256];
-static int u400_tbl[256];
-static int u2066_tbl[256];
-
-int errnoexit(const char *s)
-{
-	LOGE("%s error %d, %s", s, errno, strerror (errno));
-	return ERROR_LOCAL;
-}
-
-
-int xioctl(int fd, int request, void *arg)
+static bool
+xioctl(int fd, int req, void *arg)
 {
 	int r;
 
-	do r = ioctl (fd, request, arg);
-	while (-1 == r && ((EINTR == errno) || (EAGAIN == errno)) );
-
-	if( -1 == r ) {
-	    LOGE("error %d, %s\n", errno, strerror( errno ) );
+	if (fd == -1)
+		return false;
+	while (1) {
+		r = ioctl(fd, req, arg);
+		/* ok! */
+		if (r != -1)
+			break;
+		/* retry! */
+		if (errno == EINTR || errno == EAGAIN)
+			continue;
+		/* barf */
+		QLOGE("Lepton: Gone fishing: %s", strerror(errno));
+		return false;
 	}
-
-	return r;
+	return true;
 }
 
-int checkCamerabase(void){
-	struct stat st;
-	int i;
-	int start_from_4 = 1;
-	
-	/* if /dev/video[0-3] exist, camerabase=4, otherwise, camrerabase = 0 */
-	for(i=0 ; i<4 ; i++){
-		sprintf(dev_name,"/dev/video%d",i);
-		if (-1 == stat (dev_name, &st)) {
-			start_from_4 &= 0;
-		}else{
-			start_from_4 &= 1;
+static bool
+probedevice(void)
+{
+	char fbuf[256], rbuf[512];
+
+	/*
+	 * I pulled 64 from my ass. In theory, by the time we've allocated the
+	 * 64th device, Linux is probably going to go back to allocating
+	 * smaller numbers again.
+	 */
+	for (int i = 0; i < 64; i++) {
+		snprintf(fbuf, sizeof fbuf, "/sys/class/video4linux/video%d/name", i);
+		int rfd = open(fbuf, O_RDONLY);
+		if (rfd == -1)
+			continue;
+		int n = read(rfd, rbuf, sizeof rbuf - 1);
+		close(rfd);
+		if (n == -1)
+			continue;
+		rbuf[n] = 0;
+		if (strstr(rbuf, "PureThermal")) {
+			snprintf(dev_name, sizeof dev_name, "/dev/video%d", i);
+			return true;
 		}
 	}
-
-	if(start_from_4){
-		return 4;
-	}else{
-		return 0;
-	}
+	return false;
 }
 
-int opendevice(int i)
+static bool
+reopendevice(void)
 {
 	struct stat st;
 
-	sprintf(dev_name,"/dev/video%d",i);
-
-	if (-1 == stat (dev_name, &st)) {
-		LOGE("Cannot identify '%s': %d, %s", dev_name, errno, strerror (errno));
-		return ERROR_LOCAL;
+	if (!probedevice())
+		return false;
+	LOGI("Opening camera device %s", dev_name);
+	if (stat(dev_name, &st) != 0) {
+		LOGI("cannot stat '%s': %s", dev_name, strerror(errno));
+		return false;
 	}
 
-	if (!S_ISCHR (st.st_mode)) {
-		LOGE("%s is no device", dev_name);
-		return ERROR_LOCAL;
+	if (!S_ISCHR(st.st_mode)) {
+		LOGI("%s is not character device", dev_name);
+		return false;
 	}
 
-	fd = open (dev_name, O_RDWR | O_NONBLOCK, 0);
-
-	if (-1 == fd) {
-		LOGE("Cannot open '%s': %d, %s", dev_name, errno, strerror (errno));
-		return ERROR_LOCAL;
+	videofd = open(dev_name, O_RDWR | O_NONBLOCK, 0);
+	if (videofd == -1) {
+		LOGI("unable to open %s: %s", dev_name, strerror(errno));
+		return false;
 	}
-	return SUCCESS_LOCAL;
+	return true;
 }
 
-int initdevice(void) 
+static int
+initdevice(int w, int h)
 {
 	struct v4l2_capability cap;
 	struct v4l2_cropcap cropcap;
@@ -97,349 +115,294 @@ int initdevice(void)
 	struct v4l2_format fmt;
 	unsigned int min;
 
-	if (-1 == xioctl (fd, VIDIOC_QUERYCAP, &cap)) {
-		if (EINVAL == errno) {
-			LOGE("%s is no V4L2 device", dev_name);
-			return ERROR_LOCAL;
-		} else {
-			return errnoexit ("VIDIOC_QUERYCAP");
-		}
-	}
+	width  = w;
+	height = h;
 
+	LOGI("init device %s", dev_name);
+	if (!xioctl(videofd, VIDIOC_QUERYCAP, &cap))
+		return false;
 	if (!(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE)) {
-		LOGE("%s is no video capture device", dev_name);
-		return ERROR_LOCAL;
+		LOGE("%s: no video capture capability", dev_name);
+		return false;
 	}
 
 	if (!(cap.capabilities & V4L2_CAP_STREAMING)) {
-		LOGE("%s does not support streaming i/o", dev_name);
-		return ERROR_LOCAL;
+		LOGE("%s: no video streaming capability", dev_name);
+		return false;
 	}
-	
-	CLEAR (cropcap);
 
+	CLEAR(cropcap);
 	cropcap.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-	if (0 == xioctl (fd, VIDIOC_CROPCAP, &cropcap)) {
+	if (xioctl(videofd, VIDIOC_CROPCAP, &cropcap) == 0) {
 		crop.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-		crop.c = cropcap.defrect; 
-
-		if (-1 == xioctl (fd, VIDIOC_S_CROP, &crop)) {
-			switch (errno) {
-				case EINVAL:
-					break;
-				default:
-					break;
-			}
-		}
-	} else {
+		crop.c    = cropcap.defrect;
+		if (!xioctl(videofd, VIDIOC_S_CROP, &crop))
+			return false;
 	}
 
-	CLEAR (fmt);
-
-	fmt.type                = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-
-	fmt.fmt.pix.width       = IMG_WIDTH; 
-	fmt.fmt.pix.height      = IMG_HEIGHT;
-
+	CLEAR(fmt);
+	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	fmt.fmt.pix.width  = w;
+	fmt.fmt.pix.height = h;
 	fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_Y16;
 	fmt.fmt.pix.field       = V4L2_FIELD_NONE;
 
-	if (-1 == xioctl (fd, VIDIOC_S_FMT, &fmt))
-		return errnoexit ("VIDIOC_S_FMT");
+	if (!xioctl(videofd, VIDIOC_S_FMT, &fmt))
+		return false;
 
 	LOGI("Everything appears to be ok in initdevice()");
 
 	min = fmt.fmt.pix.width * 2;
 	if (fmt.fmt.pix.bytesperline < min)
 		fmt.fmt.pix.bytesperline = min;
-	min = fmt.fmt.pix.bytesperline * fmt.fmt.pix.height;
+	min				 = fmt.fmt.pix.bytesperline * fmt.fmt.pix.height;
 	if (fmt.fmt.pix.sizeimage < min)
 		fmt.fmt.pix.sizeimage = min;
 
-	return initmmap ();
-
+	return initmmap();
 }
 
-int initmmap(void)
+static bool
+initmmap(void)
 {
 	struct v4l2_requestbuffers req;
 
-	CLEAR (req);
+	CLEAR(req);
+	req.count  = 4;
+	req.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	req.memory = V4L2_MEMORY_MMAP;
 
-	req.count               = 4;
-	req.type                = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	req.memory              = V4L2_MEMORY_MMAP;
-
-	if (-1 == xioctl (fd, VIDIOC_REQBUFS, &req)) {
-		if (EINVAL == errno) {
-			LOGE("%s does not support memory mapping", dev_name);
-			return ERROR_LOCAL;
-		} else {
-			return errnoexit ("VIDIOC_REQBUFS");
-		}
-	}
-
+	if (!xioctl(videofd, VIDIOC_REQBUFS, &req))
+		return false;
 	if (req.count < 2) {
 		LOGE("Insufficient buffer memory on %s", dev_name);
-		return ERROR_LOCAL;
- 	}
-
-	buffers = (buffer*)calloc(req.count, sizeof (*buffers));
-
-	if (!buffers) {
-		LOGE("Out of memory");
-		return ERROR_LOCAL;
+		return false;
 	}
 
+	buffers.clear();
 	for (n_buffers = 0; n_buffers < req.count; ++n_buffers) {
 		struct v4l2_buffer buf;
 
-		 CLEAR (buf);
+		CLEAR(buf);
 
-		buf.type        = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-		buf.memory      = V4L2_MEMORY_MMAP;
-		buf.index       = n_buffers;
+		buf.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		buf.memory = V4L2_MEMORY_MMAP;
+		buf.index  = n_buffers;
 
-		if (-1 == xioctl (fd, VIDIOC_QUERYBUF, &buf))
-			return errnoexit ("VIDIOC_QUERYBUF");
+		if (!xioctl(videofd, VIDIOC_QUERYBUF, &buf))
+			return false;
 
-		buffers[n_buffers].length = buf.length;
-		buffers[n_buffers].start =
-		mmap (NULL ,
-			buf.length,
-			PROT_READ | PROT_WRITE,
-			MAP_SHARED,
-			fd, buf.m.offset);
+		buffer b;
+		b.length = buf.length;
+		b.start  = mmap(NULL, buf.length, PROT_READ | PROT_WRITE,
+				MAP_SHARED, videofd, buf.m.offset);
 
-		if (MAP_FAILED == buffers[n_buffers].start)
-			return errnoexit ("mmap");
+		if (b.start == MAP_FAILED) {
+			LOGE("mmap failed: %s", strerror(errno));
+			return false;
+		}
+		buffers.push_back(b);
+		
 	}
 
-	return SUCCESS_LOCAL;
+	return true;
 }
 
-int startcapturing(void)
+static int
+startcapturing(void)
 {
 	unsigned int i;
 	enum v4l2_buf_type type;
 
+	QLOGE("start capturing");
 	for (i = 0; i < n_buffers; ++i) {
 		struct v4l2_buffer buf;
 
-		CLEAR (buf);
+		CLEAR(buf);
 
-		buf.type        = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-		buf.memory      = V4L2_MEMORY_MMAP;
-		buf.index       = i;
+		buf.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		buf.memory = V4L2_MEMORY_MMAP;
+		buf.index  = i;
 
-		if (-1 == xioctl (fd, VIDIOC_QBUF, &buf))
-			return errnoexit ("VIDIOC_QBUF");
+		if (!xioctl(videofd, VIDIOC_QBUF, &buf))
+			return false;
 	}
 
 	type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-	if (-1 == xioctl (fd, VIDIOC_STREAMON, &type))
-		return errnoexit ("VIDIOC_STREAMON");
+	if (!xioctl(videofd, VIDIOC_STREAMON, &type))
+		return false;
 
-	return SUCCESS_LOCAL;
+	return true;
 }
 
-int readframeonce(void)
+bool
+readframeonce(uint16_t *buf)
 {
-	for (;;) {
-		fd_set fds;
-		struct timeval tv;
-		int r;
+	for (int retries = 0; retries < MAX_RETRIES; retries++) {
+		if (videofd != -1) {
+			fd_set fds;
+			struct timeval tv;
 
-		FD_ZERO (&fds);
-		FD_SET (fd, &fds);
+			FD_ZERO(&fds);
+			FD_SET(videofd, &fds);
 
-		tv.tv_sec = 2;
-		tv.tv_usec = 0;
-
-		r = select (fd + 1, &fds, NULL, NULL, &tv);
-
-		if (-1 == r) {
-			if (EINTR == errno)
+			tv.tv_sec  = 1;
+			tv.tv_usec = 0;
+			int r = select(videofd + 1, &fds, NULL, NULL, &tv);
+			if (r > 0 && readframe(buf))
+				return true;
+			else if (r == -1 && (errno == EINTR || errno == EAGAIN))
 				continue;
-
-			return errnoexit ("select");
 		}
-
-		if (0 == r) {
-			LOGE("select timeout");
-			return ERROR_LOCAL;
-
-		}
-
-		if (readframe ()==1)
-			break;
-
+		QLOGE("Lepton on union mandated leave: %s", strerror(errno));
+		reconnect();
 	}
 
-	return SUCCESS_LOCAL;
-
+	return false;
 }
 
-
-void processimage (const void *p)
+static bool
+readframe(uint16_t *out)
 {
-    rescaleToARGBY((unsigned char *)p);
-}
-
-int readframe(void)
-{
-
 	struct v4l2_buffer buf;
 	unsigned int i;
 
-	CLEAR (buf);
+	CLEAR(buf);
 
-	buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	buf.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	buf.memory = V4L2_MEMORY_MMAP;
 
-	if (-1 == xioctl (fd, VIDIOC_DQBUF, &buf)) {
-		switch (errno) {
-			case EAGAIN:
-				return 0;
-			case EIO:
-			default:
-				return errnoexit ("VIDIOC_DQBUF");
-		}
-	}
+	if (!xioctl(videofd, VIDIOC_DQBUF, &buf))
+		return false;
+	assert(buf.index < n_buffers);
+	uint8_t *src = static_cast<uint8_t *>(buffers[buf.index].start);
+	for (i = 0; i < width * height * 2; i += 2)
+		*out++ = ((uint16_t)src[i + 1] << 8) | src[i];
 
-	assert (buf.index < n_buffers);
+	if (!xioctl(videofd, VIDIOC_QBUF, &buf))
+		return false;
 
-	processimage (buffers[buf.index].start);
-
-	if (-1 == xioctl (fd, VIDIOC_QBUF, &buf))
-		return errnoexit ("VIDIOC_QBUF");
-
-	return 1;
+	return true;
 }
 
-int stopcapturing(void)
+static int
+stopcapturing(void)
 {
 	enum v4l2_buf_type type;
 
 	type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-	if (-1 == xioctl (fd, VIDIOC_STREAMOFF, &type))
-		return errnoexit ("VIDIOC_STREAMOFF");
+	if (!xioctl(videofd, VIDIOC_STREAMOFF, &type))
+		return false;
 
-	return SUCCESS_LOCAL;
-
+	return true;
 }
 
-int uninitdevice(void)
+static int
+uninitdevice(void)
 {
 	unsigned int i;
 
-	for (i = 0; i < n_buffers; ++i)
-		if (-1 == munmap (buffers[i].start, buffers[i].length))
-			return errnoexit ("munmap");
-
-	free (buffers);
-
-	return SUCCESS_LOCAL;
+	/* we can never fail here -- there's no recovery */
+	for (i = 0; i < n_buffers; ++i) {
+		munmap(buffers[i].start, buffers[i].length);
+	}
+	return true;
 }
 
-int closedevice(void)
+static int
+closedevice(void)
 {
-	if (-1 == close (fd)){
-		fd = -1;
-		return errnoexit ("close");
-	}
-
-	fd = -1;
-	return SUCCESS_LOCAL;
+	close(videofd);
+	videofd = -1;
+	return true;
 }
 
-void rescaleToARGBY(unsigned char *src)
+static int
+ffc(void)
 {
-	int width = IMG_WIDTH;
-	int height = IMG_HEIGHT;
+	uvc_xu_control_query q;
+	uint8_t c;
 
-	int frameSize = width * height*2;
-	int i;
+	q.unit     = LEP_RAD_UNIT;
+	q.query    = UVC_SET_CUR;
+	q.selector = LEP_FFC_CMD;
+	q.size     = 1;
+	q.data     = &c;
 
-	if((!rgb || !ybuf)){
-		return;
+	for (int retries = 0; retries < MAX_RETRIES; retries++) {
+		if (xioctl(videofd, UVCIOC_CTRL_QUERY, &q))
+			break;
+		QLOGE("USB failed: %s -- Reconnecting", strerror(errno));
+		reconnect();
 	}
-	int *lrgb = NULL;
-	int *lybuf = NULL;
-
-	lrgb = &rgb[0];
-	lybuf = &ybuf[0];
-
-	int minVal = (((uint16_t)src[1])<<8) + src[0];
-	int maxVal = (((uint16_t)src[1])<<8) + src[0];
-	for(i=2; i<frameSize; i+=2 ) {
-		uint16_t val = (((uint16_t)src[i+1])<<8) + src[i];
-		if( val > maxVal ) maxVal = val;
-		if( val < minVal ) minVal = val;
-	}
-	float diff = maxVal - minVal;
-	float scale = 255.0/diff;
-	const int *colormap = colormap_rainbow;
-
-	for(i=0 ; i<frameSize ; i+=2) {
-		*lybuf++ = (((uint16_t)src[i+1])<<8) + src[i];
-	}
-	for(i=0 ; i<frameSize ; i+=2){
-		unsigned char y1, y2, u, v;
-		uint16_t val = (((uint16_t)src[i+1])<<8) + src[i];
-		int value = (val - minVal) * scale;
-
-		*lrgb++ = 0xff000000 | (colormap[3*value]) | (colormap[3*value+1]<<8) | (colormap[3*value+2]<<16);
-	}
-}
-
-
-int 
-prepareCamera(int videoid){
-
-	LOGI("Preparing camera preview...");
-
-	if(camerabase<0){
-		camerabase = checkCamerabase();
-	}
-
-	LOGI("Opening device.");
-	assert(opendevice(camerabase + videoid) == SUCCESS_LOCAL);
-	LOGI("Done opening device. Now initializing device.");
-	assert(initdevice() == SUCCESS_LOCAL);
-	LOGI("Done initializing device. Now capturing from device.");
-	assert(startcapturing() == SUCCESS_LOCAL);
-	rgb = (int *)malloc(sizeof(int) * (IMG_WIDTH*IMG_HEIGHT));
-	ybuf = (int *)malloc(sizeof(int) * (IMG_WIDTH*IMG_HEIGHT));
+	LOGI("FFC done");
 	return 1;
+}
+
+void
+reconnect()
+{
+	/* close down devices */
+	LOGI("Reconnect: Shut down existing connections");
+	stopcapturing();
+	uninitdevice();
+	closedevice();
+
+	LOGI("Reconnect: reopen device");
+	if (!reopendevice())
+		return;
+	if (!initdevice(width, height))
+		return;
+	if (!startcapturing())
+		return;
+	waserror = 0;
+}
+
+int
+initLepton(int w, int h)
+{
+	width  = w;
+	height = h;
+	LOGI("reconnecting to camera at %dx%d", w, h);
+	reconnect();
+	return 1;
+}
+
+int
+waitFrame( void )
+{
+	while (1) {
+		if (videofd == -1)
+			return 0;
+		fd_set fds;
+		struct timeval tv;
+		FD_ZERO(&fds);
+		FD_SET(videofd, &fds);
+		tv.tv_sec  = 1;
+		tv.tv_usec = 0;
+		int r = select(videofd + 1, &fds, NULL, NULL, &tv);
+		if (r != -1)
+			return 1;
+		if (r == -1 && errno != EAGAIN && errno != EINTR)
+			return 0;
+	}
 }
 
 int
 leptonFfc(void)
 {
-       struct uvc_xu_control_query q;
-       uint8_t c;
-       int r;
-
-       q.unit = LEP_RAD_UNIT;
-       q.query = UVC_SET_CUR;
-       q.selector = LEP_FFC_CMD;
-       q.size = 1;
-       q.data = &c;
-
-       r = xioctl(fd, UVCIOC_CTRL_QUERY, &q);
-       if (r < 0)
-               LOGE("Error doing FFC: %s", strerror(errno));
-       LOGI("FFC done");
-       return r;
+	return ffc();
 }
 
-int*
-getbuf()
+void
+deinit()
 {
-	return ybuf;
+	/* No error checking -- it may already be gone */
+	stopcapturing();
+	uninitdevice();
+	closedevice();
+	videofd = -1;
 }
-

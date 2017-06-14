@@ -10,18 +10,12 @@
 #define PACKET_SIZE_UINT16 (PACKET_SIZE/2)
 #define PACKETS_PER_FRAME 60
 #define FRAME_SIZE_UINT16 (PACKET_SIZE_UINT16*PACKETS_PER_FRAME)
-
-#include <boost/python.hpp>
-#include <boost/numpy.hpp>
 #include <vector>
 #include <string>
 #include <memory>
 
 #include <pthread.h>
 
-using namespace boost::python;
-namespace bp = boost::python;
-namespace bn = boost::numpy;
 using namespace MarkovTools;
 
 using std::vector;
@@ -39,7 +33,7 @@ public:
   int getRadModeState();
   int getRBFO();
   int setRBFO();
-  void OpenPorts(int vid);
+  void OpenPorts();
   int ClosePorts();
   int createLeptonThread();
   void leptonFrameGrabberThread();
@@ -54,7 +48,7 @@ public:
   bool isThreadCreated() {	return leptonThreadCreated;  }
   double getLastLeptonFrameTime() { return timeOfLastLeptonFrame; }
   void executeAfterReset();
-
+  void updateImageStats(uint16_t *buf, int len);
   void updateFrameRate();
   void ffc();
   double getLeptonFrameRate();
@@ -69,7 +63,6 @@ private:
 	int packetNumber;
 	int framesSinceLastReset;
 	double timeWhenLastReset;
-	//vector<uint32_t> lwirImage;
 	vector<uint16_t> imageData;
 
 	// Lepton Frame grabbing related variables

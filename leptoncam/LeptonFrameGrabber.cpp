@@ -6,7 +6,6 @@
 #include "markovTimeTools.h"
 
 #include <iostream> 
-#include <boost/python.hpp>
 #include <vector>
 #include <string>
 
@@ -17,7 +16,6 @@
 #define FPS 27
 
 
-using namespace boost::python;
 using std::vector;
 using std::endl;
 using std::cout;
@@ -26,13 +24,12 @@ using std::make_unique;
 #define IMG_HDR  ( 9 )
 #define IMG_SIZE ( IMG_WIDTH * IMG_HEIGHT + IMG_HDR )
 
-void LeptonFrameGrabber::OpenPorts(int vid) {
-	prepareCamera(0);
+void LeptonFrameGrabber::OpenPorts() {
+	initLepton(IMG_WIDTH,IMG_HEIGHT);
 }
 
 int LeptonFrameGrabber::ClosePorts() {
-	uninitdevice();
-	closedevice();
+	deinit();
 }
 
 LeptonFrameGrabber::LeptonFrameGrabber(std::string fileName) : imageData( IMG_WIDTH*IMG_HEIGHT ),
@@ -45,15 +42,13 @@ LeptonFrameGrabber::LeptonFrameGrabber(std::string fileName) : imageData( IMG_WI
 	packetNumber = 0;
 	lwirImg.hdr.w = IMG_WIDTH;
 	lwirImg.hdr.h = IMG_HEIGHT;
-	// lwirImg.hdr.w = 160;
-	// lwirImg.hdr.h = 120;
 	// These will be filled in later at runtime.
 	lwirImg.hdr.low = 65535;
 	lwirImg.hdr.high = 0;
 	lwirImg.hdr.time = 0;
 	lwirImg.hdr.internal_temp = -100;
 
-	lwirImg.img = new uint16_t[lwirImg.hdr.w * lwirImg.hdr.h];
+	lwirImg.img = new uint16_t[  IMG_WIDTH * IMG_HEIGHT ];
 
 	leptonThreadCreated = false;
 	singleLeptonPoll = false;
@@ -66,7 +61,7 @@ LeptonFrameGrabber::LeptonFrameGrabber(std::string fileName) : imageData( IMG_WI
 	timeWhenLastReset = MarkovTools::TimeTools::getEpochTime();
 
 	//open v4l port
-	OpenPorts(0);
+	OpenPorts();
 }
 
 LeptonFrameGrabber::~LeptonFrameGrabber() {
@@ -107,7 +102,7 @@ void LeptonFrameGrabber::performFFC() {
         //lepton_perform_ffc();
 }
 
-void LeptonFrameGrabber::initiateSinglePoll() {
+void LeptonFrameGrabber::initiateSinglePoll() 					{
 	MarkovScopedMutexGuard msg(leptonMutex);
 	singleLeptonPoll = true;
 	pthread_cond_signal( &leptonCond );
@@ -165,7 +160,7 @@ void LeptonFrameGrabber::leptonFrameGrabberThread(void)
 {
 	uint16_t lastChksum = 0;
 	grabLeptonFrame = false;
-	vector<uint8_t> data(IMG_HEIGHT*IMG_WIDTH + 8); // 4600 uint16 words and a double for frame-rate.
+	vector<uint8_t> data(IMG_HEIGHT*IMG_WIDTH*2 + 8); // 4600 uint16 words and a double for frame-rate.
 	framesSinceLastReset = 0;
 	timeWhenLastReset = MarkovTools::TimeTools::getEpochTime();
 	while (!stopRunningLeptonThread)
@@ -202,16 +197,13 @@ void LeptonFrameGrabber::leptonFrameGrabberThread(void)
 		}
 
 		timeOfLastLeptonFrame = MarkovTools::TimeTools::getEpochTime();
-		memcpy(&data[0], (uint8_t*)&frame[0], IMG_HEIGHT*IMG_WIDTH);
+		memcpy(&data[0], (uint8_t*)&frame[0], 60*80*2);
 		double frameRate = this->getLeptonFrameRate();
 
 		// We just grabbed a frame. Put it in the outgoing Image Queue.
 		if (chksum != lastChksum ) {
-			lwirImg.img = &frame[0];
-			lptFrame.get()->writeFrame(&lwirImg);
 			//	TODO: Albert, you will need to put this into a queue, or write out to file with a timestamp here...
 			// tcpTransport->sendDataThroughPacket( data, (uint16_t)MKV_LEPTON_FRAME_IMG );
-			printf("Wrote a frame?");
 		}
 		if( singleLeptonPoll ) {
 			singleLeptonPoll = false;
@@ -240,29 +232,29 @@ double LeptonFrameGrabber::getLeptonFrameRate()
 	return leptonFramerate;
 }
 
+void LeptonFrameGrabber::updateImageStats(uint16_t *buf, int len)
+{
+	uint16_t min = 65535, max=0;
+	for (int i=0; i<len; i++) {
+		if (buf[i]<min) min = buf[i];
+		if (buf[i]>max) max = buf[i];
+	}
+	lwirImg.hdr.low = min;
+	lwirImg.hdr.high = max;
+}
 
 vector<uint16_t> LeptonFrameGrabber::GrabImage()
 {
-	std::vector<uint16_t> ret;
+	std::vector<uint16_t> ret(IMG_WIDTH*IMG_HEIGHT);
 	printf("reading frame\n");
-	if (readframeonce() == SUCCESS_LOCAL) {
-		int *buf = getbuf();
-		// std::cout << "dims" << buf->sequence() << std::endl;
-		for (int i = 0; i < IMG_WIDTH*IMG_HEIGHT; i++) {
-			ret.push_back(buf[i]);
-		}
+	if (readframeonce( &ret[0] )) {
+	    memcpy(lwirImg.img, &ret[0], IMG_WIDTH*IMG_HEIGHT*2);
+	    lwirImg.hdr.time = MarkovTools::TimeTools::getEpochTime();
+	    updateImageStats(&ret[0],ret.size());
+	    lptFrame->writeFrame(&lwirImg);
+	    printf("done\n");
 	}
-	printf("done frame\n");
-
-	lwirImg.img = &ret[0];
-	double currentTime = MarkovTools::TimeTools::getEpochTime();
-	lwirImg.hdr.time = currentTime;
-	lptFrame.get()->writeFrame(&lwirImg);
-
-	//	TODO: Albert, you will need to put this into a queue, or write out to file with a timestamp here...
-	// tcpTransport->sendDataThroughPacket( data, (uint16_t)MKV_LEPTON_FRAME_IMG );
-	std::cout << "Wrote a frame?  12345th pix is " << ret[12345] << std::endl;
-
+	
 	return ret;
 }
 

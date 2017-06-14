@@ -17,7 +17,6 @@ int LeptFrame::writeFrame( const LeptonRawImage_t *img ) {
 		// Write the header
 		fwrite( (void*)&(img->hdr), sizeof(LeptonRawFrameHdr_t), 1, fp );
 		fwrite( (void*)(img->img), sizeof(uint16_t), img->hdr.w * img->hdr.h, fp );
-		fflush( fp );
 	}
 	else {
 		fprintf(stderr,"\nError: File not open.");

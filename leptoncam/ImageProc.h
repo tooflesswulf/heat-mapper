@@ -43,31 +43,28 @@
 #define ERROR_LOCAL -1
 #define SUCCESS_LOCAL 0
 
-struct buffer {
-        void *                  start;
-        size_t                  length;
-};
-
 int errnoexit(const char *s);
 
-int xioctl(int fd, int request, void *arg);
+//int xioctl(int fd, int request, void *arg);
 
-int checkCamerabase(void);
-int opendevice(int videoid);
-int initdevice(void);
-int initmmap(void);
-int startcapturing(void);
+//int checkCamerabase(void);
+//int opendevice(int videoid);
+//int initdevice(void);
+//int initmmap(void);
+//int startcapturing(void);
+bool readframeonce(uint16_t *out);
+// bool readframe(uint16_t *out);
+//void processimage (const void *p);
 
-int readframeonce(void);
-int readframe(void);
-void processimage (const void *p);
-
-int stopcapturing(void);
-int uninitdevice(void);
-int closedevice(void);
-int *getbuf();
+//int stopcapturing(void);
+//int uninitdevice(void);
+//int closedevice(void);
+//int *getbuf();
 int leptonFfc(void);
 int prepareCamera(int videoid);
 
-void yuyv422toABGRY(unsigned char *src);
-void rescaleToARGBY(unsigned char *src);
+//void yuyv422toABGRY(unsigned char *src);
+//void rescaleToARGBY(unsigned char *src);
+int initLepton(int w, int h);
+int waitFrame( void );
+void deinit();

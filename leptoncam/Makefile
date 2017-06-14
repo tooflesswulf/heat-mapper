@@ -8,9 +8,8 @@ INCLUDES = \
 	   -I../markovtools
 
 LIBS= -L/usr/lib -L/usr/local/lib -L/usr/local/lib64 -L/usr/lib64 \
-	-lstdc++ -L. -L../markovlibs \
-	-L/usr/lib/arm-linux-gnueabihf -lpython2.7 \
-	-lboost_python -lboost_numpy -L../muwcomm -lmarkovtools -lpthread
+	-lstdc++ -L. -L../markovlibs -L/usr/lib/arm-linux-gnueabihf \
+	-L../muwcomm -lmarkovtools -lpthread
 
 CC=gcc
 CFLAGS=	-g -c $(SHFLAGS) $(INCLUDES) -std=c++14 -DLEPTON3
@@ -49,7 +48,7 @@ clean:
 	echo "Removing all Boost Python objs"
 	rm -f $(OBJS)
 	rm -f $(PYMODULE)
-	rm -f $(LEPTONTEST)
+	rm -f $(LEPTONTEST) $(LEPTONTESTOBJS)
 
 $(OUTDIR):
 	mkdir -p $(OUTDIR)
