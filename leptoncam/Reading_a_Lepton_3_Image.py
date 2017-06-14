@@ -8,7 +8,7 @@ leptonHdrDtype = np.dtype( [('width',np.int32), \
                           ('intTemp',np.int32), \
                           ('timeStamp',np.float64), \
                           ('padBytes',np.uint16),
-                         ('img',np.uint16, (19200,))] )
+                         ('img',np.uint16, (160*120,))] )
 
 imgs = np.fromfile('Test.dat',dtype=leptonHdrDtype)
 
