@@ -2,10 +2,20 @@ import numpy as np
 import pickle
 import matplotlib.pyplot as plt
 import sys
+import os
 
 try:
-	id = int(sys.argv[1])
+	fname = sys.argv[1]
+	if os.path.exists(fname):
+		try:
+			id = int(sys.argv[2])
+		except:
+			id = 0
+	else:
+		fname = 'Test.dat'
+		id = int(sys.argv[1])
 except:
+	fname = 'Test.dat'
 	id = 0
 
 dt = np.dtype( [('w', np.intc),
@@ -18,7 +28,7 @@ dt = np.dtype( [('w', np.intc),
 				('img', np.uint16, (160*120,))
 				])
 
-a = np.fromfile('Test.dat', dtype=dt)
+a = np.fromfile(fname, dtype=dt)
 
 img = a['img'].reshape(-1,120,160)
 # img = img.reshape(100,-1)
@@ -31,21 +41,21 @@ avg = np.mean(to_disp)
 
 print("Mean value: {}".format(avg))
 
-a = to_disp[30:61,0:80].copy()
-to_disp[30:61, 0:80] = to_disp[30:61,80:]
-to_disp[30:61, 80:] = a
+# a = to_disp[30:61,0:80].copy()
+# to_disp[30:61, 0:80] = to_disp[30:61,80:]
+# to_disp[30:61, 80:] = a
 
-a = to_disp[91:,0:80].copy()
-to_disp[91:, 0:80] = to_disp[91:,80:]
-to_disp[91:, 80:] = a
+# a = to_disp[91:,0:80].copy()
+# to_disp[91:, 0:80] = to_disp[91:,80:]
+# to_disp[91:, 80:] = a
 
-to_disp[30:-1, 80:] = to_disp[31:, 80:]
-to_disp[60:-1, :80] = to_disp[61:, :80]
-to_disp[90:-1, 80:] = to_disp[91:, 80:]
+# to_disp[30:-1, 80:] = to_disp[31:, 80:]
+# to_disp[60:-1, :80] = to_disp[61:, :80]
+# to_disp[90:-1, 80:] = to_disp[91:, 80:]
 
 # print(np.argwhere(np.abs(to_disp - avg) > 1000))
 
-plt.figure("Image numbers {}".format(id))
+plt.figure("Image number {}".format(id))
 try:	plt.imshow(to_disp - avg)
 except:	plt.imshow(img[id])
 plt.show()
