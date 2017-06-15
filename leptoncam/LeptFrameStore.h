@@ -29,12 +29,14 @@ class LeptFrame
 private:
 	FILE *fp;
 	bool isOpen;
-	char *fileName;
-	int seqNum;
+	char *fname;
+	char *fn;
+	int count;
 	LeptFrame();
 public:
 	LeptFrame( const char *fileName ); 
 	int writeFrame( const LeptonRawImage_t *img );
+	int reopen();
 	int close();
 	bool is_open();
 	~LeptFrame();

@@ -32,10 +32,18 @@ a = np.fromfile(fname, dtype=dt)
 
 img = a['img'].reshape(-1,120,160)
 # img = img.reshape(100,-1)
-# print(img.shape)
+print("Number of images: {}".format(img.shape[0]))
 
 threshold = 1000
 to_disp = img[id]
+
+r=395653
+b = 1428
+f = 1
+o = 156
+t_k = b / np.log(r / (to_disp - o) + f)
+disp_c = t_k - 273.15
+
 avg = np.mean(to_disp)
 # to_disp[np.abs(to_disp - avg) > threshold] = avg + 999
 
@@ -55,7 +63,9 @@ print("Mean value: {}".format(avg))
 
 # print(np.argwhere(np.abs(to_disp - avg) > 1000))
 
+
+
 plt.figure("Image number {}".format(id))
-try:	plt.imshow(to_disp - avg)
+try:	plt.imshow(disp_c)
 except:	plt.imshow(img[id])
 plt.show()

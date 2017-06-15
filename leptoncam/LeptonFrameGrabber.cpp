@@ -245,6 +245,7 @@ void LeptonFrameGrabber::updateImageStats(uint16_t *buf, int len)
 
 vector<uint16_t> LeptonFrameGrabber::GrabImage()
 {
+	// printf("hi there");
 	std::vector<uint16_t> ret(IMG_WIDTH*IMG_HEIGHT);
 	printf("reading frame\n");
 	if (readframeonce( &ret[0] )) {
@@ -252,6 +253,8 @@ vector<uint16_t> LeptonFrameGrabber::GrabImage()
 	    lwirImg.hdr.time = MarkovTools::TimeTools::getEpochTime();
 	    updateImageStats(&ret[0],ret.size());
 	    lptFrame->writeFrame(&lwirImg);
+	    updateFrameRate();
+
 	    printf("done\n");
 	}
 	
