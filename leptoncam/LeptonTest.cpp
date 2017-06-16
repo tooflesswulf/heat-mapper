@@ -30,8 +30,8 @@ int main(int argc, char *argv[])
 	sleep(1);
 	cout<<"Now grabbing frames..."<<endl;
 
-	for(int i=0;i<100;i++) {
-	// while(true){
+	// for(int i=0;i<100;i++) {
+	while(true){
 		vector<uint16_t> img=lfg.GrabImage();
 	}
 

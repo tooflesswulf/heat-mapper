@@ -21,7 +21,7 @@ LeptFrame::LeptFrame( const char *fileName )
 }
 
 int LeptFrame::writeFrame( const LeptonRawImage_t *img ) {
-	if(count > 1000)
+	if(count > 250)
 		reopen();
 	if( isOpen ) {
 		// Write the header

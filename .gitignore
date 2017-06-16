@@ -33,4 +33,8 @@
 
 # Data
 *.dat
+*.p
+*.pkl
+*.xml
+*.iml
 
