@@ -7,8 +7,8 @@ import os
 from data_parser import parse_data, conv_celsius
 
 summ_loc = 'summary/slices/'
-zone = slice(48,75), slice(73,125)
-zonename = '06'
+zone = slice(10,-10), slice(10,-10)
+zonename = ''
 markerid = -1
 
 def get_image(fname, id):
@@ -23,6 +23,7 @@ def segment_image(im):
 	data = cv2.convertScaleAbs(im)
 	# ret, thresh = cv2.threshold(data,0,1,cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)
 	ret, thresh = cv2.threshold(data,0,1,cv2.THRESH_OTSU)
+	thresh = cv2.convertScaleAbs((im > np.mean(im) + 1*np.std(im)).astype(int))
 	# filtered = thresh*data
 
 	ret, markers = cv2.connectedComponents(thresh)
@@ -40,17 +41,17 @@ def segment_image(im):
 	y_minmax = np.amin(ylocs), np.amax(ylocs)+1
 	slicezone = slice(*y_minmax), slice(*x_minmax)
 
-	maskimg = markers/np.amax(markers) * data
+	maskimg = thresh * data
 
 	plt.figure()
 	plt.subplot(221)
 	plt.imshow(im)
 	plt.subplot(222)
-	plt.imshow(thresh)
-	plt.subplot(223)
 	plt.imshow(maskimg)
+	plt.subplot(223)
+	plt.imshow(markers)
 	plt.subplot(224)
-	plt.imshow(markers[slicezone])
+	plt.imshow(maskimg[slicezone])
 	plt.show()
 
 	return maskimg[slicezone]
@@ -60,9 +61,9 @@ def segment_image(im):
 if __name__ == '__main__':
 	args = sys.argv[1:]
 	save = False
-	if args[1][-1]=='s':
+	if args[-1][-1]=='s':
 		save = True
-		args[1] = args[1][:-1]
+		args[-1] = args[-1][:-1]
 
 	try:
 		fname = args[0]
@@ -77,6 +78,11 @@ if __name__ == '__main__':
 	except:
 		fname = 'Test.dat'
 		id = 0
+	try:
+		markerid = int(args[2])
+	except:
+		markerid = -1
+
 	slash_loc = [pos for pos, char in enumerate(fname) if char == '/']
 	folder = fname[:slash_loc[-1]+1]
 
@@ -86,6 +92,9 @@ if __name__ == '__main__':
 	to_save = segment_image(im[zone])
 	if save:
 		print('Saving into {}f{}.pkl.'.format(zonename, id))
+		if not os.path.exists(folder+summ_loc):
+			os.makedirs(folder+summ_loc)
+			print('Made folder '+folder+summ_loc)
 		pickle.dump(to_save, open(folder+summ_loc+zonename+'f{}.pkl'.format(id), 'wb'))
 
 

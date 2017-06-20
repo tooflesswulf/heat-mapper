@@ -137,6 +137,7 @@ if __name__ == '__main__':
 	pickle.dump(bigstds, open(folder+summ_loc+'bigstds'+'.pkl', 'wb'))
 	pickle.dump(bigmins, open(folder+summ_loc+'bigmins'+'.pkl', 'wb'))
 	pickle.dump(bigmedians, open(folder+summ_loc+'bigmedians'+'.pkl', 'wb'))
+	pickle.dump(times, open(folder+summ_loc+'times'+'.pkl', 'wb'))
 	print("Done.")
 
 

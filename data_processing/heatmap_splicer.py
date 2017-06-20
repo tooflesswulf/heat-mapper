@@ -9,6 +9,8 @@ from data_parser import parse_data, conv_celsius
 import cv2
 from matplotlib.collections import PolyCollection
 
+proj3d = False
+potato_time_constant = 620
 
 def get_image(fname, id):
 	data, times = parse_data(fname)
@@ -92,56 +94,105 @@ def imagerec_slices(fname, id):
 
 def get_sliced_images2(path):
 	fnames = os.listdir(path)
+	print('Reading files in this order:')
+	data, ts = parse_data(path+'../../potato.dat')
+	ts -= ts[0]
+
 	images = []
+	times = []
 	for fn in fnames:
 		if fn.endswith('.pkl'):
+			print(fn)
 			images.append(pickle.load(open(path+fn, 'rb')))
-	return images
+			times.append(int(fn[1:-4]))
+
+	orig_img = []
+	for im, t in zip(images, times):
+		orig = (im-20) * np.exp(ts[t]/160)
+		orig[im==0] = 0
+		orig_img.append(orig)
+
+	return orig_img
+	# return images
 
 def centered_slice(l1, l2):
 	start = int((l1-l2)/2)
 	end = int((l1+l2)/2)
 	return slice(start, end)
 
+def images_into_array(images):
+	shapes = np.array([a.shape for a in images]).T
+	x, y = np.amax(shapes, axis=1)
+	newarr = np.zeros((len(images), x, y))
+	for img, sto in zip(images, newarr):
+		x2, y2 = img.shape
+		sto[centered_slice(x, x2), centered_slice(y, y2)] = img
+
+	return newarr
+
+def interpolate_image(img, nn):
+	counter = 0
+	newimg = img[0].reshape(1, -1)
+	for l1, l2 in zip(img[1:], img[:-1]):
+		counter += nn
+		n = int(counter)
+		between = np.array([np.linspace(i,j,n+1, endpoint=False)[1:] for i,j in zip(l2,l1)]).T
+		newimg = np.concatenate( (newimg, between), axis=0)
+		counter -= n
+		newimg = np.concatenate( (newimg, l1.reshape(1,-1)), axis=0)
+	return newimg
+
+
 
 def disp_sliced_images(fname, id):
 	sliced_images = get_sliced_images2(fname)
 
-	flat_vals = []
-	shapes = []
-	for a in sliced_images:
-		flat_vals.append(a.flatten())
-		shapes.append(a.shape)
-
-	flat_vals = np.hstack(flat_vals)
+	flat_vals = np.hstack([a.flatten() for a in sliced_images])
 	mx = np.amax(flat_vals)
 
-	shapes = np.array(shapes).T
-	x, y = np.amax(shapes, axis=1)
-	newarr = np.zeros((len(sliced_images), x, y))
-	for img, sto in zip(sliced_images, newarr):
-		x2, y2 = img.shape
-		sto[centered_slice(x, x2), centered_slice(y, y2)] = img
+	newarr = images_into_array(sliced_images)
 
-	fig = plt.figure()
-	ax1 = fig.add_subplot(111, projection='3d')
+	if proj3d:
+		fig = plt.figure()
+		ax1 = fig.add_subplot(111, projection='3d')
 	fig2 = plt.figure()
 
 	k = 1 #z-spacing on scatterplot
 	for i, im in zip(range(len(newarr)), newarr):
-		ax = fig2.add_subplot(4, 4, i+1)
+		ax = fig2.add_subplot(4, 3, i+1)
 
 		ax.imshow(im, vmin=0, vmax=mx)
 
-		# x, y = im.shape
-		nz = np.nonzero(im)
-		locs = np.argwhere(im)[::1]
-		yy, xx = locs.T
-		ax1.scatter(xx, yy, k*i, alpha=.5, c=im[yy, xx], vmin=0, vmax=mx, depthshade=False)
-	ax1.set_xlabel('x')
-	ax1.set_ylabel('y')
-	ax1.set_zlabel('z')
-	ax1.set_zlim(1,5)
+		if proj3d:
+			locs = np.argwhere(im)[::1]
+			yy, xx = locs.T
+			ax1.scatter(xx, yy, k*i, alpha=.5, c=im[yy, xx], vmin=0, vmax=mx, depthshade=False)
+
+	try:
+		orig = pickle.load(open(fname+'orig.p', 'rb'))
+		fig2.add_subplot(4,3,10)
+		guess = cv2.resize(newarr[...,6], orig.shape[::-1], cv2.INTER_LINEAR)
+		plt.imshow(guess, vmin=0, vmax=mx)
+		fig2.add_subplot(4,3,11)
+		plt.imshow(orig, vmin=0, vmax=mx)
+		fig2.add_subplot(4,3,12)
+		diff = np.abs(orig - guess)
+		diff[np.where(orig==0)] = 0
+		diff[np.where(guess==0)] = 0
+		plt.imshow(diff, vmin=0)
+
+		print('RMSE: {}'.format(np.sqrt(np.mean(diff**2))))
+		plt.imshow
+		fig2.add_subplot(4,3,13)
+		plt.imshow(interpolate_image(newarr[:,16,:], 3), vmin=0, vmax=mx)
+
+	except:
+		pass
+	if proj3d:
+		ax1.set_xlabel('x')
+		ax1.set_ylabel('y')
+		ax1.set_zlabel('z')
+		ax1.set_zlim(1,5)
 	plt.show()
 
 if __name__ == '__main__':
