@@ -140,6 +140,17 @@ if __name__ == '__main__':
 	pickle.dump(times, open(folder+summ_loc+'times'+'.pkl', 'wb'))
 	print("Done.")
 
+	plt.figure('big min, mean, max, and stddev')
+	plt.errorbar(np.arange(bigmeans.shape[0]), bigmeans, yerr = bigstds, errorevery=100, elinewidth=1,
+		label='Mean and 1 SD')
+	plt.plot(bigmins, label = 'Guessed min.')
+	plt.plot(maxes, label='Max')
+	plt.plot(bigmedians, label='Median')
+	plt.legend(bbox_to_anchor=(1.05, 1), loc=0, borderaxespad=0.)
+
+	plt.show()
+
+
 
 
 

@@ -23,7 +23,7 @@ def segment_image(im):
 	data = cv2.convertScaleAbs(im)
 	# ret, thresh = cv2.threshold(data,0,1,cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)
 	ret, thresh = cv2.threshold(data,0,1,cv2.THRESH_OTSU)
-	thresh = cv2.convertScaleAbs((im > np.mean(im) + 1*np.std(im)).astype(int))
+	# thresh = cv2.convertScaleAbs((im > np.mean(im) + 1*np.std(im)).astype(int))
 	# filtered = thresh*data
 
 	ret, markers = cv2.connectedComponents(thresh)
@@ -91,10 +91,11 @@ if __name__ == '__main__':
 
 	to_save = segment_image(im[zone])
 	if save:
-		print('Saving into {}f{}.pkl.'.format(zonename, id))
+		savefile = zonename+'f'+str(id).zfill(4)+'.pkl'
+		print('Saving into '+savefile+'.')
 		if not os.path.exists(folder+summ_loc):
 			os.makedirs(folder+summ_loc)
 			print('Made folder '+folder+summ_loc)
-		pickle.dump(to_save, open(folder+summ_loc+zonename+'f{}.pkl'.format(id), 'wb'))
+		pickle.dump(to_save, open(folder+summ_loc+savefile, 'wb'))
 
 

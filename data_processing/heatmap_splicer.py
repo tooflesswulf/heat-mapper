@@ -112,8 +112,8 @@ def get_sliced_images2(path):
 		orig[im==0] = 0
 		orig_img.append(orig)
 
-	return orig_img
-	# return images
+	# return orig_img
+	return images
 
 def centered_slice(l1, l2):
 	start = int((l1-l2)/2)
