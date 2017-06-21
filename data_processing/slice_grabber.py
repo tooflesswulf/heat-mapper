@@ -19,11 +19,14 @@ def get_image(fname, id):
 	image = conv_celsius(data[id])
 	return image
 
-def segment_image(im):
+def segment_image(im, alt):
 	data = cv2.convertScaleAbs(im)
 	# ret, thresh = cv2.threshold(data,0,1,cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)
-	ret, thresh = cv2.threshold(data,0,1,cv2.THRESH_OTSU)
-	# thresh = cv2.convertScaleAbs((im > np.mean(im) + 1*np.std(im)).astype(int))
+	if alt:
+		thresh = cv2.convertScaleAbs((im > np.mean(im) + 1.25*np.std(im)).astype(int))
+		thresh = cv2.convertScaleAbs((im > 31).astype(int))
+	else:
+		ret, thresh = cv2.threshold(data,0,1,cv2.THRESH_OTSU)
 	# filtered = thresh*data
 
 	ret, markers = cv2.connectedComponents(thresh)
@@ -32,16 +35,17 @@ def segment_image(im):
 		to_del = np.argwhere(binc < 10)
 		for d in to_del:
 			markers[markers==d] = 0
+			thresh[markers==d] = 0
 	else:
 		markers[markers != markerid] = 0
-
+		thresh = markers/np.amax(markers)
 
 	ylocs, xlocs = np.where(markers) #where filtered.nonzero()
 	x_minmax = np.amin(xlocs), np.amax(xlocs)+1
 	y_minmax = np.amin(ylocs), np.amax(ylocs)+1
 	slicezone = slice(*y_minmax), slice(*x_minmax)
 
-	maskimg = thresh * data
+	maskimg = im * thresh
 
 	plt.figure()
 	plt.subplot(221)
@@ -63,6 +67,11 @@ if __name__ == '__main__':
 	save = False
 	if args[-1][-1]=='s':
 		save = True
+		args[-1] = args[-1][:-1]
+
+	alt = False
+	if args[-1][-1]=='a':
+		alt = True
 		args[-1] = args[-1][:-1]
 
 	try:
@@ -89,7 +98,7 @@ if __name__ == '__main__':
 
 	im = get_image(fname, id)
 
-	to_save = segment_image(im[zone])
+	to_save = segment_image(im[zone], alt)
 	if save:
 		savefile = zonename+'f'+str(id).zfill(4)+'.pkl'
 		print('Saving into '+savefile+'.')
