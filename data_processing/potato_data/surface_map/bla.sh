@@ -19,16 +19,21 @@ cd dat
 scp pi@192.168.86.180:~/heat-mapper/potato* .
 mv potato.dat potato_final.dat
 cd ..
-scp pi@192.168.86.180:~/heat-mapper/layout.jpg .
+ssh pi@192.168.86.180 'raspistill -o layout.jpg'
+scp pi@192.168.86.180:~/layout.jpg .
 touch potato.dat
 cat dat/*.dat > potato.dat
+else
+echo "Not pulling files from pi because they already exist."
 fi
 
 cd ..
-source ~/tensorflow/bin/activate
-python ~/heat-mapper2/data_processing/data_parser.py $1/potato.dat
-deactivate
 
 else
 echo "$folder already exists."
 fi
+
+source ~/tensorflow/bin/activate
+python ~/heat-mapper2/data_processing/data_parser.py $folder/potato.dat
+#python ~/heat-mapper2/data_processing/visualize_short.py $folder/summary/
+deactivate

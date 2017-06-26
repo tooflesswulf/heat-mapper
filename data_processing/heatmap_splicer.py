@@ -159,7 +159,7 @@ def disp_sliced_images(fname, id):
 
 	k = 1 #z-spacing on scatterplot
 	for i, im in zip(range(len(newarr)), newarr):
-		ax = fig2.add_subplot(4, 3, i+1)
+		ax = fig2.add_subplot(4, 4, i+1)
 
 		ax.imshow(im, vmin=0, vmax=mx)
 

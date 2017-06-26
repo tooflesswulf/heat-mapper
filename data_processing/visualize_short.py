@@ -13,7 +13,9 @@ bigstds = pickle.load(open(summ_loc+'bigstds.pkl', 'rb'))
 bigmedians = pickle.load(open(summ_loc+'bigmedians.pkl', 'rb'))
 
 plt.figure('big min, mean, max, and stddev')
-plt.errorbar(np.arange(bigmeans.shape[0]), bigmeans, yerr = bigstds, errorevery=100, elinewidth=1,
+
+n = bigmeans.shape[0]
+plt.errorbar(np.arange(n), bigmeans, yerr = bigstds, errorevery=n//20, elinewidth=1,
 	label='Mean and 1 SD')
 plt.plot(bigmins, label = 'Guessed min.')
 plt.plot(maxes, label='Max')
