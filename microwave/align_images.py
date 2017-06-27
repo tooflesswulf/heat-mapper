@@ -26,15 +26,17 @@ ret = pickle.load(open('persp_mat.p','rb'))
 # print(picam.shape, picam.dtype)
 # print(lepton[5,5])
 
-# a = np.zeros((8,2))
-
-# i=0
+a = np.zeros((8,2))
+i=0
 def onclick(event):
-    print('xdata=%f, ydata=%f' %
+     global i
+     a[i] = event.xdata, event.ydata
+     i += 1
+     print('xdata=%f, ydata=%f' %
           (event.xdata, event.ydata))
 
-fig = plt.figure()
-cid = fig.canvas.mpl_connect('button_press_event', onclick)
+# fig = plt.figure()
+# cid = fig.canvas.mpl_connect('button_press_event', onclick)
 
 # plt.subplot(121)
 # plt.imshow(picam)
@@ -43,8 +45,11 @@ cid = fig.canvas.mpl_connect('button_press_event', onclick)
 # plt.show()
 
 # a = a.reshape(2,4,2).astype(np.float32)
+# print(a)
+
 # ret = cv2.getPerspectiveTransform(a[1],a[0])
 # print(ret)
+# print('SAVED.')
 # pickle.dump(ret, open('persp_mat.p','wb'))
 
 
@@ -53,13 +58,13 @@ cid = fig.canvas.mpl_connect('button_press_event', onclick)
 r, c, _ = picam.shape
 warp = cv2.warpPerspective(lepton, ret, dsize=(c,r))
 
-# plt.subplot(121)
-# plt.imshow(picam)
-# plt.subplot(122)
-# plt.imshow(warp)
+plt.subplot(121)
+plt.imshow(picam)
+plt.subplot(122)
+plt.imshow(warp)
 
-# plt.figure()
-plt.imshow(warp, alpha=.6)
+plt.figure()
+plt.imshow(warp, alpha=.7)
 plt.imshow(picam, alpha=.6)
 
 plt.show()
