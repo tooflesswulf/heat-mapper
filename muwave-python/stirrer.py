@@ -74,7 +74,7 @@ class StirrerControl:
        return (status,resp)
     
     def controlLights( self, value ):
-        self.ser.write('/1J%1d%1dR\r\n'%(self.addr,value))
+        self.ser.write('/%1dJ%1dR\r\n'%(self.addr,value))
         self.lastResponse= self.ser.readline()
         printHexStr( self.lastResponse )
 
@@ -87,6 +87,7 @@ class StirrerControl:
 
 def main():
     s=StirrerControl(port='/dev/ttyUSB0',addr=1)
+    s.controlLights(100)
     print s
     s.setSlowMoveCurrent( 60 )
     s.gotoHomePos()
@@ -104,6 +105,7 @@ def main():
     print s.getCurrentPos()
     s.moveAbsPos(1000)
     print s.getCurrentPos()
+
     s.close()
 
 if __name__ == '__main__':
