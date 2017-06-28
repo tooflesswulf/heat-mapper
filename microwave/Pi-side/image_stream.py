@@ -74,7 +74,7 @@ def check_splatter(images):
     assert images.shape[0] >= 3
     to_check = conv_celsius(images[-3:])
     diff = to_check[1] - 0.5*to_check[0] - 0.5*to_check[2]
-    rmse = np.sqrt(np.mean(diff ** 2, axis=1))
+    rmse = np.sqrt(np.mean(diff ** 2))
     return rmse > 1.5
 
 
