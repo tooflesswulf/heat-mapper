@@ -3,12 +3,10 @@ import cv2
 import pickle
 import matplotlib.pyplot as plt
 
-im_therm = pickle.load(open('images/therm0.pkl','rb'))
-im_rgb = pickle.load(open('images/rgb0.pkl','rb'))[...,::-1]
 warp_mat = pickle.load(open('persp_mat.p','rb'))
 
 
-def get_chunk_thresholds(im_therm, binnum=50, peak_spacing=5):
+def get_chunk_thresholds(im_therm, binnum=50, peak_spacing=5, less=False):
     histo, edges = np.histogram(im_therm.flatten(), bins=binnum)
     grad = np.gradient(histo)
     grad[np.abs(grad)<.025*np.sum(histo)/binnum] = 0
@@ -40,19 +38,24 @@ def get_chunk_thresholds(im_therm, binnum=50, peak_spacing=5):
     lows.append(binnum)
     lows = np.array(lows)
 
+    if less:
+        return highs, lows, edges
     return edges[lows]
 
-threshs = get_chunk_thresholds(im_therm)
+if __name__ == '__main__':
+    im_therm = pickle.load(open('images/therm0.pkl', 'rb'))
+    im_rgb = pickle.load(open('images/rgb0.pkl', 'rb'))[..., ::-1]
 
-im_zones = np.zeros_like(im_therm)
-for i, (e1, e2) in enumerate(zip(threshs[:-1], threshs[1:])):
-    im_zones[(e1 <= im_therm) & (im_therm <= e2)] = i
+    threshs = get_chunk_thresholds(im_therm)
 
+    im_zones = np.zeros_like(im_therm)
+    for i, (e1, e2) in enumerate(zip(threshs[:-1], threshs[1:])):
+        im_zones[(e1 <= im_therm) & (im_therm <= e2)] = i
 
-x,y,_ = im_rgb.shape
+    x,y,_ = im_rgb.shape
 
-# plt.imshow(im_zones)
-# plt.imshow(im_therm)
-plt.imshow(cv2.warpPerspective(im_zones, warp_mat, (y,x)), alpha=.5)
-plt.imshow(im_rgb, alpha=.5)
-plt.show()
+    # plt.imshow(im_zones)
+    # plt.imshow(im_therm)
+    plt.imshow(cv2.warpPerspective(im_zones, warp_mat, (y,x)), alpha=.5)
+    plt.imshow(im_rgb, alpha=.5)
+    plt.show()
