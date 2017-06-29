@@ -50,7 +50,7 @@ s.controlLights(3)
 
 # initialize the camera and grab a reference to the raw camera capture
 camera = PiCamera()
-# camera.resolution = (1280, 960)
+camera.resolution = (1280, 960)
 camera.framerate = 32
 camera.vflip = True
 camera.hflip = True
@@ -72,6 +72,7 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
     if show:
         cv2.imshow("Frame", image)
         key = cv2.waitKey(1) & 0xFF
+
 
     # clear the stream in preparation for the next frame
     rawCapture.truncate(0)
