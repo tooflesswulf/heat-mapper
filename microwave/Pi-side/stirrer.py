@@ -83,6 +83,8 @@ class StirrerControl:
         # printHexStr( self.lastResponse )
 
     def close(self):
+        while self.getCurrentPos()[0]!=98:
+            pass
         self.controlLights(0)
         self.moveAbsPos(0)
         self.ser.close()
