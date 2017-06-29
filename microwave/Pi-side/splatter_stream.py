@@ -29,7 +29,7 @@ print('leptonTest pid: ', thermstream.pid)
 time.sleep(0.1)
 
 warp_const = pickle.load(open('persp_mat.p', 'rb'))
-time_record_threshold = 5 #seconds
+time_record_threshold = 1.5 #seconds
 therm_disp = np.zeros((r, c))
 images_list = [(0, np.zeros((r,c)))]
 i = 0
@@ -43,7 +43,7 @@ cv2.namedWindow("Thermal")
 cv2.setMouseCallback("Thermal", on_click)
 
 
-def image_grabber(images_in_memory=100):
+def image_grabber(images_in_memory=200):
     for frame in camera.capture_continuous(rawCapture, format='bgr', use_video_port=True):
         image = frame.array
         t = time.time()
@@ -59,19 +59,25 @@ thread.start()
 
 splat_times = np.array([])
 def onsplat(time):
-    if any(np.abs(splat_times-time) < time_record_threshold):
+    global splat_times
+    if any(np.abs(splat_times-time) < time_record_threshold*2):
         return
-    np.append(splat_times, time)
-    min_idx = next(idx for idx, x in enumerate(images_list) if x >= time - time_record_threshold)
+    splat_times = np.append(splat_times, time)
+    while images_list[-1][0] <= time+time_record_threshold:
+        pass
     try:
-        max_idx = next(idx for idx, x in enumerate(images_list[min_idx:]) if x <= time + time_record_threshold)
+        min_idx = next(idx for idx, (t, im) in enumerate(images_list) if t >= time - time_record_threshold)
+    except StopIteration:
+        min_idx = 0
+    try:
+        max_idx = next(idx for idx, (t, im) in enumerate(images_list[min_idx:]) if t > time + time_record_threshold)
         max_idx += min_idx
     except StopIteration:
         to_save = images_list[min_idx:]
     else:
         to_save = images_list[min_idx:max_idx]
-    pickle.dump(to_save, open('splatter_t_{}'.format(time)))
-    print('Splatter detected. Images saved.')
+    pickle.dump(to_save, open('splatter_t_{}.pkl'.format(time), 'wb'))
+    print('Splatter detected at {}. Images saved.'.format(time))
 
 thermal = therm_frame_grabber.start_thread(onsplat)
 

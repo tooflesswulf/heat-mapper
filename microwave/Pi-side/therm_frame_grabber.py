@@ -50,7 +50,7 @@ def grab_frames(last_time):
         frame_list = np.concatenate((frame_list, imgs[mask]), axis=0)
         times_list = np.concatenate((times_list, ts[mask]))
 
-        if fname != 'thermal.dat':
+        if ts[mask].shape[0] == 0 and fname != 'thermal.dat':
             read_files.add(fname)
 
     sort_order = np.argsort(times_list, axis=0)
@@ -60,6 +60,7 @@ def grab_frames(last_time):
 # Checks the a set of images for splatter.
 # Currently checks 3 frames around the target.
 def check_splatter(images):
+    # return True
     assert images.shape[0] >= 3
     to_check = images[-3:]
     diff = to_check[1] - 0.5 * to_check[0] - 0.5 * to_check[2]
@@ -80,7 +81,7 @@ def thread_loop(latest_img, on_splatter=lambda x: print('Splatter at t={}'.forma
             latest_img.storet(times[-1])
         if len(frames) >= 3:
             frames = conv_celsius(frames)
-            for i in range(1, len(frames) - 2):
+            for i in range(1, len(frames) - 1):
                 if check_splatter(frames[i - 1:i + 2]):
                     on_splatter(times[i])
             last_time = times[-2]
