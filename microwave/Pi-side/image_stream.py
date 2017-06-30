@@ -70,14 +70,6 @@ def process_thermal(therm_img):
     return th
 
 
-def check_splatter(images):
-    assert images.shape[0] >= 3
-    to_check = conv_celsius(images[-3:])
-    diff = to_check[1] - 0.5*to_check[0] - 0.5*to_check[2]
-    rmse = np.sqrt(np.mean(diff ** 2))
-    return rmse > 1.5
-
-
 # capture frames from the camera
 for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
     # grab the raw NumPy array representing the image, then initialize the timestamp

@@ -2,7 +2,10 @@ import numpy as np
 import glob
 import threading
 import time
+import cv2
+
 read_files = set([])
+soup_rad = 30 #px
 dt = np.dtype([('w', np.intc),
                ('h', np.intc),
                ('low', np.intc),
@@ -21,6 +24,15 @@ def conv_celsius(temps):
     o = 156
     t_k = b / np.log(r / (temps - o) + f)
     return t_k - 273.15
+
+
+def cmask(center, radius, array_like):
+  a,b = center
+  nx,ny = array_like.shape
+  y,x = np.ogrid[-a:nx-a,-b:ny-b]
+  mask = x*x + y*y <= radius*radius
+
+  return mask
 
 
 class ObjectStorer(object):
@@ -59,13 +71,19 @@ def grab_frames(last_time):
 
 # Checks the a set of images for splatter.
 # Currently checks 3 frames around the target.
+# Checks if there is a sudden change of 1 degree Celsius or more in the background.
 def check_splatter(images):
     # return True
     assert images.shape[0] >= 3
     to_check = images[-3:]
     diff = to_check[1] - 0.5 * to_check[0] - 0.5 * to_check[2]
-    rmse = np.sqrt(np.mean(diff ** 2))
-    return rmse > 1.5
+
+    diff = cv2.GaussianBlur(diff,(5,5),0)
+    r, c = img.shape
+    cm = cmask((r/2, c/2), soup_rad, diff)
+
+    max = np.amax(diff * (1 - cm))
+    return max > 1
 
 
 # Main thread loop. Grabs the latest few frames, and checks them for splatter.

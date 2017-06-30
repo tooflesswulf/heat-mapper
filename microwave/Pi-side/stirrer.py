@@ -31,6 +31,13 @@ class StirrerControl:
     def write(self, st):
         self.ser.write(st.encode())
 
+    def isReady(self):
+        return self.getCurrentPos()[0]==98
+
+    def waitReady(self):
+        while not self.isReady():
+            pass
+
     def setSlowMoveCurrent(self, value):
         self.write('/%1dl%dR\r\n'%(self.addr,value))
         self.lastResponse=self.ser.readline()
@@ -83,8 +90,7 @@ class StirrerControl:
         # printHexStr( self.lastResponse )
 
     def close(self):
-        while self.getCurrentPos()[0]!=98:
-            pass
+        self.waitReady()
         self.controlLights(0)
         self.moveAbsPos(0)
         self.ser.close()

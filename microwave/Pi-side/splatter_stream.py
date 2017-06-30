@@ -9,8 +9,12 @@ from subprocess import Popen
 import pickle
 import therm_frame_grabber
 import threading
+import stirrer
 
 
+s = stirrer.StirrerControl(port='/dev/ttyUSB0',addr=1)
+s.waitReady()
+s.controlLights(3)
 
 # initialize the camera and grab a reference to the raw camera capture
 camera = PiCamera()
@@ -29,7 +33,7 @@ print('leptonTest pid: ', thermstream.pid)
 time.sleep(0.1)
 
 warp_const = pickle.load(open('persp_mat.p', 'rb'))
-time_record_threshold = 1.5 #seconds
+default_time_record_threshold = 1.5 #seconds
 therm_disp = np.zeros((r, c))
 images_list = [(0, np.zeros((r,c)))]
 i = 0
@@ -57,30 +61,42 @@ thread = threading.Thread(target=image_grabber)
 thread.setDaemon(True)
 thread.start()
 
-splat_times = np.array([])
-def onsplat(time):
-    global splat_times
-    if any(np.abs(splat_times-time) < time_record_threshold*2):
-        return
-    splat_times = np.append(splat_times, time)
-    while images_list[-1][0] <= time+time_record_threshold:
+
+def get_nearby_images(time, thresh=default_time_record_threshold):
+    while images_list[-1][0] <= time+thresh:
         pass
     try:
-        min_idx = next(idx for idx, (t, im) in enumerate(images_list) if t >= time - time_record_threshold)
+        min_idx = next(idx for idx, (t, im) in enumerate(images_list) if t >= time - thresh)
     except StopIteration:
         min_idx = 0
     try:
-        max_idx = next(idx for idx, (t, im) in enumerate(images_list[min_idx:]) if t > time + time_record_threshold)
+        max_idx = next(idx for idx, (t, im) in enumerate(images_list[min_idx:]) if t > time + thresh)
         max_idx += min_idx
     except StopIteration:
         to_save = images_list[min_idx:]
     else:
         to_save = images_list[min_idx:max_idx]
+    return to_save
+
+splat_times = np.array([])
+def onsplat(time):
+    global splat_times
+    if any(np.abs(splat_times-time) < default_time_record_threshold*2):
+        print('Splatter detected at {}. Images not saved due to proximity of another splatter.'.format(time))
+        return
+    splat_times = np.append(splat_times, time)
+    to_save = get_nearby_images(time)
+
     pickle.dump(to_save, open('splatter_t_{}.pkl'.format(time), 'wb'))
     print('Splatter detected at {}. Images saved.'.format(time))
 
 thermal = therm_frame_grabber.start_thread(onsplat)
 
+
+def manual_save(t):
+    to_save = get_nearby_images(t, 1)
+    pickle.dump(to_save, open('manual_save_t_{}.pkl'.format(t), 'wb'))
+    print('Done saving current images.')
 
 while True:
     therm_img = thermal.value
@@ -92,10 +108,9 @@ while True:
 
     if key == ord("s"):
         t = thermal.time
-        pickle.dump((t, therm_img), open('therm{}.pkl'.format(i), 'wb'))
-        pickle.dump((t, pi_img), open('rgb{}.pkl'.format(i), 'wb'))
-        i += 1
-        print('Saved current images.')
+        print('Preparing to save curent images...')
+        th = threading.Thread(target=manual_save, args=[t])
+        th.start()
 
     if key == ord("q"):
         break
@@ -106,3 +121,5 @@ thermstream.kill()
 print('Splatters detected at the following times:')
 for t in splat_times:
     print(t)
+
+s.close()

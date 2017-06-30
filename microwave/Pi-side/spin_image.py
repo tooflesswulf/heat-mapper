@@ -19,13 +19,6 @@ else:
     else:
         show = False
 
-def is_ready(s):
-    return s.getCurrentPos()[0]==98
-
-def wait_ready(s):
-    while not is_ready(s):
-        pass
-
 def save_img(img, name):
     cv2.imwrite(name, img)
 
@@ -45,7 +38,7 @@ def img_thread(img, save_freq = .5):
 
 
 s = stirrer.StirrerControl(port='/dev/ttyUSB0',addr=1)
-wait_ready(s)
+s.wait_ready()
 s.controlLights(3)
 
 # initialize the camera and grab a reference to the raw camera capture
@@ -79,10 +72,10 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
 
     cur_pos += 200
     s.moveAbsPos(cur_pos)
-    wait_ready(s)
+    s.wait_ready()
     s.moveRelPos(-100)
     cur_pos -= 100
-    wait_ready(s)
+    s.wait_ready()
     time.sleep(2)
 
     # clear the stream in preparation for the next frame
