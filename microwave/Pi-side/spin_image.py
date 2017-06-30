@@ -62,7 +62,6 @@ time.sleep(0.1)
 # s.moveAbsPos(4200)
 
 cur_pos = 0
-flag = False
 # capture frames from the camera
 for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
     # grab the raw NumPy array representing the image, then initialize the timestamp
@@ -71,20 +70,20 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
     # img_thread(image)
     key = cv2.waitKey(1) & 0xFF
 
-    if flag:
-        flag = False
-        img_thread(image)
-        cur_pos += 100
-        s.moveAbsPos(cur_pos)
+    img_thread(image)
 
-        # show the frame
-        if show:
-            cv2.imshow("Frame", image)
-        time.sleep(.1)
+    # show the frame
+    if show:
+        cv2.imshow("Frame", image)
+    time.sleep(.1)
 
-    if is_ready(s):
-        time.sleep(1)
-        flag = True
+    cur_pos += 200
+    s.moveAbsPos(cur_pos)
+    wait_ready(s)
+    s.moveRelPos(-100)
+    cur_pos -= 100
+    wait_ready(s)
+    time.sleep(2)
 
     # clear the stream in preparation for the next frame
     rawCapture.truncate(0)
