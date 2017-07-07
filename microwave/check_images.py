@@ -69,7 +69,7 @@ def conv_celsius(temps):
 
 def get_img(num, a):
     img = a['img'][num].reshape(120,160)
-    img = np.rot90(img[10:])
+    img = np.rot90(img[5:-5])
     return conv_celsius(img)
 
 
@@ -89,7 +89,6 @@ def get_lapl(img):
     r, c = img.shape
     cm = cmask((r/2, c/2), soup_rad, img)
     lapl[cm] = np.nan
-    # lapl[np.abs(lapl) > 7] = 0
     m = np.nanmean(lapl)
     lapl[cm] = m
     return lapl
@@ -222,9 +221,12 @@ rgb_images = {}
 def load_rgb(path):
     pickle_files = glob.glob(path+'*.pkl')
     for p in pickle_files:
-        images = pickle.load(open(p, 'rb'))
-        for t, im in images:
-            rgb_images[t] = im
+        try:
+            images = pickle.load(open(p, 'rb'))
+            for t, im in images:
+                rgb_images[t] = im
+        except:
+            print(p+' did not open properly.')
 
 
 def link_rgb(therm_t):

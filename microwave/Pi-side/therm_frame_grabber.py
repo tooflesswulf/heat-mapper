@@ -88,8 +88,8 @@ def check_splatter(images):
     assert images.shape[0] == 2
 
     # Strip the first few cols b/c theres some distortions.
-    i1 = images[1].reshape(120,160)[5:]
-    i2 = images[0].reshape(120,160)[5:]
+    i1 = images[1].reshape(120,160)[5:-5]
+    i2 = images[0].reshape(120,160)[5:-5]
 
     l1 = get_lapl(i1)
     l2 = get_lapl(i2)
@@ -105,7 +105,7 @@ def check_splatter(images):
     #     print(score)
     #     print('END DEBUG')
 
-    return score > 10
+    return score > 5
 
 
 # Main thread loop. Grabs the latest few frames, and checks them for splatter.

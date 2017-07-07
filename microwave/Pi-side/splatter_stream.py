@@ -81,10 +81,10 @@ def get_nearby_images(time, thresh=default_time_record_threshold):
 splat_times = np.array([])
 def onsplat(time):
     global splat_times
-    if any(np.abs(splat_times-time) < default_time_record_threshold*2):
+    splat_times = np.append(splat_times, time)
+    if any(np.abs(splat_times-time) < default_time_record_threshold*1.5):
         print('Splatter detected at {}. Images not saved due to proximity of another splatter.'.format(time))
         return
-    splat_times = np.append(splat_times, time)
     to_save = get_nearby_images(time)
 
     pickle.dump(to_save, open('splatter_t_{}.pkl'.format(time), 'wb'))
@@ -117,6 +117,8 @@ while True:
 
 print('Terminating thermal stream.')
 thermstream.kill()
+
+pickle.dump(splat_times, open('splat_times.pkl', 'wb'))
 
 print('Splatters detected at the following times:')
 for t in splat_times:
