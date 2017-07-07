@@ -73,36 +73,79 @@ def get_img(num, a):
     return conv_celsius(img)
 
 
+def is_outlier(points, thresh=3.5):
+    """
+    Returns a boolean array with True if points are outliers and False
+    otherwise.
+
+    Parameters:
+    -----------
+        points : An numobservations by numdimensions array of observations
+        thresh : The modified z-score to use as a threshold. Observations with
+            a modified z-score (based on the median absolute deviation) greater
+            than this value will be classified as outliers.
+
+    Returns:
+    --------
+        mask : A numobservations-length boolean array.
+
+    References:
+    ----------
+        Boris Iglewicz and David Hoaglin (1993), "Volume 16: How to Detect and
+        Handle Outliers", The ASQC Basic References in Quality Control:
+        Statistical Techniques, Edward F. Mykytka, Ph.D., Editor.
+    """
+    if len(points.shape) == 1:
+        points = points[:,None]
+    median = np.median(points, axis=0)
+    diff = np.sum((points - median)**2, axis=-1)
+    diff = np.sqrt(diff)
+    med_abs_deviation = np.median(diff)
+
+    modified_z_score = 0.6745 * diff / med_abs_deviation
+
+    return modified_z_score > thresh
+
+
 def disp_diff(d):
     plt.clf()
 
     a = disp['a']
-    img = get_img(d + 1, a)
-    img2 = get_img(d + 2, a)
-    img3 = get_img(d, a)
+    img = get_img(d, a)
+    img2 = get_img(d + 1, a)
+    img3 = get_img(d - 1, a)
 
     dyeiff = img - 0.5 * img2 - 0.5 * img3
     dyeiff = cv2.GaussianBlur(dyeiff,(5,5),0)
 
+    lap1 = cv2.Laplacian(img, cv2.CV_64F)
+    lap2 = cv2.Laplacian(img2, cv2.CV_64F)
+    lap3 = cv2.Laplacian(img3, cv2.CV_64F)
+    diff_alt = lap1 - 0.5 * (lap2 + lap3)
+    # diff_alt = cv2.GaussianBlur(diff_alt,(5,5),0)
+
     r, c = img.shape
     cm = cmask((r/2, c/2), soup_rad, dyeiff)
+    diff_nocenter = diff_alt * (1-cm)
+
+    cnt = np.count_nonzero(is_outlier(diff_nocenter, thresh=3))
+
+    # print(np.mean(diff_nocenter[diff_nocenter > p]))
 
     plt.subplot(221)
-    plt.imshow(img)
-    plt.subplot(222)
-
-    plt.imshow(img * (1-cm))
-    plt.subplot(223)
     plt.imshow(dyeiff)
-    # plt.imshow(img2)
-    # plt.imshow(img3)
-    # if d in rgb_images.keys():
-    #     plt.imshow(rgb_images[d][...,::-1])
+    plt.subplot(222)
+    # plt.imshow(dyeiff * (1-cm))
+    plt.imshow(diff_nocenter)
+    plt.subplot(223)
+    plt.imshow(img)
     plt.subplot(224)
-    plt.imshow(dyeiff * (1-cm))
-    diff_rmse = np.mean(dyeiff) **2
+
+    if d in rgb_images.keys():
+        plt.imshow(rgb_images[d][...,::-1])
+    # diff_rmse = np.mean(dyeiff) **2
     # plt.gcf().canvas.set_window_title( 'FRAME: {}\tNEW_RMSE DIFF: {}'.format(d, diff_rmse) )
-    plt.gcf().canvas.set_window_title( 'FRAME: {}\tMAX DIFF: {}'.format(d, np.amax(dyeiff * (1-cm))) )
+    plt.gcf().canvas.set_window_title( 'FRAME: {}\tSCORE: {}'.format(d, cnt) )
     disp['mode'] = 'single'
     disp['x'] = d
 
@@ -163,7 +206,14 @@ def check_dat(fname):
     # maxes = np.amax(diff, axis=1)
     # mins = np.amin(diff, axis=1)
 
-    tot_diff = np.sqrt(np.mean(diff**2, axis=1))
+    r, c = (120, 160)
+    cm = cmask((r/2, c/2), soup_rad, np.zeros((120, 160)))
+
+    diff = diff * (1-cm.flatten())
+
+    tot_diff = np.amax(diff, axis=1)
+    # tot_diff = np.sqrt(np.mean(diff**2, axis=1))
+
     # tot_diff = np.mean(diff, axis=1) **2
     outlier_locs = np.where(tot_diff > 1.5)
 

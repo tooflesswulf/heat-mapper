@@ -77,12 +77,19 @@ def check_splatter(images):
     assert images.shape[0] >= 3
     to_check = images[-3:]
     diff = to_check[1] - 0.5 * to_check[0] - 0.5 * to_check[2]
+    diff = cv2.GaussianBlur(diff.reshape(120, 160),(5,5),0)
 
-    diff = cv2.GaussianBlur(diff,(5,5),0)
-    r, c = img.shape
+    r, c = diff.shape
     cm = cmask((r/2, c/2), soup_rad, diff)
 
     max = np.amax(diff * (1 - cm))
+    # if max > 1:
+    #     print('DEBUG')
+    #     print(cm.shape)
+    #     print(images.shape)
+    #     print(max)
+    #     print('END DEBUG')
+
     return max > 1
 
 
