@@ -73,40 +73,6 @@ def get_img(num, a):
     return conv_celsius(img)
 
 
-def is_outlier(points, thresh=3.5):
-    """
-    Returns a boolean array with True if points are outliers and False
-    otherwise.
-
-    Parameters:
-    -----------
-        points : An numobservations by numdimensions array of observations
-        thresh : The modified z-score to use as a threshold. Observations with
-            a modified z-score (based on the median absolute deviation) greater
-            than this value will be classified as outliers.
-
-    Returns:
-    --------
-        mask : A numobservations-length boolean array.
-
-    References:
-    ----------
-        Boris Iglewicz and David Hoaglin (1993), "Volume 16: How to Detect and
-        Handle Outliers", The ASQC Basic References in Quality Control:
-        Statistical Techniques, Edward F. Mykytka, Ph.D., Editor.
-    """
-    if len(points.shape) == 1:
-        points = points[:,None]
-    median = np.median(points, axis=0)
-    diff = np.sum((points - median)**2, axis=-1)
-    diff = np.sqrt(diff)
-    med_abs_deviation = np.median(diff)
-
-    modified_z_score = 0.6745 * diff / med_abs_deviation
-
-    return modified_z_score > thresh
-
-
 def splat_score(im_num):
     a = disp['a']
     img = get_img(im_num, a)
@@ -126,7 +92,6 @@ def get_lapl(img):
     # lapl[np.abs(lapl) > 7] = 0
     m = np.nanmean(lapl)
     lapl[cm] = m
-    lapl = cv2.GaussianBlur(lapl,(1,1),0)
     return lapl
 
 
@@ -153,18 +118,6 @@ def disp_diff(d):
     plt.imshow(img)
     # plt.imshow(diff_nocenter)
     plt.subplot(222)
-    # plt.imshow(dyeiff * (1-cm))
-
-    # dur2 = lap1.copy()
-    # dur2[cm] = np.nan
-    # dur2[np.abs(dur2) > 8] = 0
-    # m = np.nanmean(dur2)
-    # dur2[cm] = m
-    #
-    # dur = lap1 * (1-cm)
-    # dur[dur < -8] = 0
-    # dur[dur > 8] = 0
-    # dur[np.abs(dur) >= 1] = 1
 
     # print(np.count_nonzero(ou))
     # dur = dur - np.amin(dur)

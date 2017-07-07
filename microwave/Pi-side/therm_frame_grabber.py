@@ -26,12 +26,12 @@ def conv_celsius(temps):
     return t_k - 273.15
 
 
+# Creates a circle mask with some radius and center.
 def cmask(center, radius, array_like):
   a,b = center
   nx,ny = array_like.shape
   y,x = np.ogrid[-a:nx-a,-b:ny-b]
   mask = x*x + y*y <= radius*radius
-
   return mask
 
 
@@ -69,32 +69,47 @@ def grab_frames(last_time):
     return frame_list[sort_order], times_list[sort_order]
 
 
+def get_lapl(img):
+    lapl = cv2.Laplacian(img, cv2.CV_64F)
+    r, c = img.shape
+    cm = cmask((r/2, c/2), soup_rad, img)
+    lapl[cm] = np.nan
+    # lapl[np.abs(lapl) > 7] = 0
+    m = np.nanmean(lapl)
+    lapl[cm] = m
+    return lapl
+
+
 # Checks the a set of images for splatter.
-# Currently checks 3 frames around the target.
-# Checks if there is a sudden change of 1 degree Celsius or more in the background.
+# Currently checks the target and previous frame.
+# Takes the Laplacian of both images, and if there is any significant increase greater than 10(?), it marks a splatter.
+# I don't actually know the units, just guessing with this magic number right now.
 def check_splatter(images):
-    # return True
-    assert images.shape[0] >= 3
-    to_check = images[-3:]
-    diff = to_check[1] - 0.5 * to_check[0] - 0.5 * to_check[2]
-    diff = cv2.GaussianBlur(diff.reshape(120, 160),(5,5),0)
+    assert images.shape[0] == 2
 
-    r, c = diff.shape
-    cm = cmask((r/2, c/2), soup_rad, diff)
+    # Strip the first few cols b/c theres some distortions.
+    i1 = images[1].reshape(120,160)[5:]
+    i2 = images[0].reshape(120,160)[5:]
 
-    max = np.amax(diff * (1 - cm))
-    # if max > 1:
+    l1 = get_lapl(i1)
+    l2 = get_lapl(i2)
+    # diff = to_check[1] - 0.5 * to_check[0] - 0.5 * to_check[2]
+    diff = l2 - l1
+
+    score = np.amax(diff) - np.mean(diff)
+
+    # if score > 10:
     #     print('DEBUG')
     #     print(cm.shape)
     #     print(images.shape)
-    #     print(max)
+    #     print(score)
     #     print('END DEBUG')
 
-    return max > 1
+    return score > 10
 
 
 # Main thread loop. Grabs the latest few frames, and checks them for splatter.
-# When it finds splatter, call <on_splatter>().
+# When it finds splatter, call on_splatter().
 # Repeat.
 def thread_loop(latest_img, on_splatter=lambda x: print('Splatter at t={}'.format(x)) ):
     last_time = 0
@@ -107,7 +122,7 @@ def thread_loop(latest_img, on_splatter=lambda x: print('Splatter at t={}'.forma
         if len(frames) >= 3:
             frames = conv_celsius(frames)
             for i in range(1, len(frames) - 1):
-                if check_splatter(frames[i - 1:i + 2]):
+                if check_splatter(frames[i - 1:i+1]):
                     on_splatter(times[i])
             last_time = times[-2]
 
