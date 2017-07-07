@@ -69,7 +69,7 @@ def conv_celsius(temps):
 
 def get_img(num, a):
     img = a['img'][num].reshape(120,160)
-    img = np.rot90(img)
+    img = np.rot90(img[10:])
     return conv_celsius(img)
 
 
@@ -107,6 +107,29 @@ def is_outlier(points, thresh=3.5):
     return modified_z_score > thresh
 
 
+def splat_score(im_num):
+    a = disp['a']
+    img = get_img(im_num, a)
+    imgp = get_img(im_num-1, a)
+
+    l1 = get_lapl(img)
+    l2 = get_lapl(imgp)
+    zz = l2 - l1
+    return np.amax(zz) - np.mean(zz)
+
+
+def get_lapl(img):
+    lapl = cv2.Laplacian(img, cv2.CV_64F)
+    r, c = img.shape
+    cm = cmask((r/2, c/2), soup_rad, img)
+    lapl[cm] = np.nan
+    # lapl[np.abs(lapl) > 7] = 0
+    m = np.nanmean(lapl)
+    lapl[cm] = m
+    lapl = cv2.GaussianBlur(lapl,(1,1),0)
+    return lapl
+
+
 def disp_diff(d):
     plt.clf()
 
@@ -118,34 +141,56 @@ def disp_diff(d):
     dyeiff = img - 0.5 * img2 - 0.5 * img3
     dyeiff = cv2.GaussianBlur(dyeiff,(5,5),0)
 
-    lap1 = cv2.Laplacian(img, cv2.CV_64F)
-    lap2 = cv2.Laplacian(img2, cv2.CV_64F)
-    lap3 = cv2.Laplacian(img3, cv2.CV_64F)
-    diff_alt = lap1 - 0.5 * (lap2 + lap3)
-    # diff_alt = cv2.GaussianBlur(diff_alt,(5,5),0)
-
     r, c = img.shape
     cm = cmask((r/2, c/2), soup_rad, dyeiff)
-    diff_nocenter = diff_alt * (1-cm)
+    diff_nocenter = dyeiff * (1-cm)
 
-    cnt = np.count_nonzero(is_outlier(diff_nocenter, thresh=3))
+    # cnt = np.count_nonzero(is_outlier(diff_nocenter, thresh=3))
 
     # print(np.mean(diff_nocenter[diff_nocenter > p]))
 
     plt.subplot(221)
-    plt.imshow(dyeiff)
+    plt.imshow(img)
+    # plt.imshow(diff_nocenter)
     plt.subplot(222)
     # plt.imshow(dyeiff * (1-cm))
-    plt.imshow(diff_nocenter)
+
+    # dur2 = lap1.copy()
+    # dur2[cm] = np.nan
+    # dur2[np.abs(dur2) > 8] = 0
+    # m = np.nanmean(dur2)
+    # dur2[cm] = m
+    #
+    # dur = lap1 * (1-cm)
+    # dur[dur < -8] = 0
+    # dur[dur > 8] = 0
+    # dur[np.abs(dur) >= 1] = 1
+
+    # print(np.count_nonzero(ou))
+    # dur = dur - np.amin(dur)
+    # dur = dur/np.amax(dur)
+    # dur = dur.astype(np.uint8)
+    # ret2, dur = cv2.threshold(dur, 1, 0, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # dur2 = cv2.GaussianBlur(dur2,(5,5),0)
+
+    lap1 = get_lapl(img)
+    lap2 = get_lapl(img3)
+
+    zz = lap2 - lap1
+
+    plt.imshow(lap1)
     plt.subplot(223)
-    plt.imshow(img)
+    plt.imshow(zz - np.mean(zz))
     plt.subplot(224)
 
     if d in rgb_images.keys():
         plt.imshow(rgb_images[d][...,::-1])
+
     # diff_rmse = np.mean(dyeiff) **2
     # plt.gcf().canvas.set_window_title( 'FRAME: {}\tNEW_RMSE DIFF: {}'.format(d, diff_rmse) )
-    plt.gcf().canvas.set_window_title( 'FRAME: {}\tSCORE: {}'.format(d, cnt) )
+    # plt.gcf().canvas.set_window_title( 'FRAME: {}\tSCORE: {}'.format(d, splat_score(d)) )
+    plt.gcf().canvas.set_window_title( 'FRAME: {}\tMAX: {}'.format(d, np.amax(zz) - np.mean(zz)) )
     disp['mode'] = 'single'
     disp['x'] = d
 
@@ -202,25 +247,17 @@ def check_dat(fname):
     times = a['time']
     link_rgb(times)
 
-    diff = images[1:-1] - 0.5*images[2:] - 0.5*images[:-2]
-    # maxes = np.amax(diff, axis=1)
-    # mins = np.amin(diff, axis=1)
-
-    r, c = (120, 160)
-    cm = cmask((r/2, c/2), soup_rad, np.zeros((120, 160)))
-
-    diff = diff * (1-cm.flatten())
-
-    tot_diff = np.amax(diff, axis=1)
+    score = [splat_score(i) for i in range(1, len(images)-1)]
+    score = np.array(score)
     # tot_diff = np.sqrt(np.mean(diff**2, axis=1))
 
     # tot_diff = np.mean(diff, axis=1) **2
-    outlier_locs = np.where(tot_diff > 1.5)
+    # outlier_locs = np.where(score > 1.5)
 
     fig = plt.figure(1)
     disp['mode'] = 'summ'
-    disp['tot_diff'] = tot_diff
-    plt.plot(tot_diff)
+    disp['tot_diff'] = score
+    plt.plot(score)
     has_img = np.array(list(rgb_images.keys()))
     plt.scatter(has_img, np.zeros_like(has_img), c='g')
     cid = fig.canvas.mpl_connect('button_press_event', on_click)
