@@ -7,6 +7,7 @@ import threading
 import sys
 
 img_store_loc = 'chicken/'
+fname = 'tomato'
 
 try:
     msg = sys.argv[1]
@@ -30,7 +31,7 @@ def img_thread(img, save_freq = .5):
         timestamp = time.time()
         if timestamp - lastsave > save_freq:
             lastsave = timestamp
-            save_name = img_store_loc + 'chicken_{}.jpg'.format(timestamp)
+            save_name = img_store_loc + '{}_{}.jpg'.format(fname, timestamp)
             thread = threading.Thread(target=save_img, args=[img, save_name])
             thread.start()
     else:
@@ -38,7 +39,7 @@ def img_thread(img, save_freq = .5):
 
 
 s = stirrer.StirrerControl(port='/dev/ttyUSB0',addr=1)
-s.wait_ready()
+s.waitReady()
 s.controlLights(3)
 
 # initialize the camera and grab a reference to the raw camera capture
@@ -72,10 +73,10 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
 
     cur_pos += 200
     s.moveAbsPos(cur_pos)
-    s.wait_ready()
+    s.waitReady()
     s.moveRelPos(-100)
     cur_pos -= 100
-    s.wait_ready()
+    s.waitReady()
     time.sleep(2)
 
     # clear the stream in preparation for the next frame

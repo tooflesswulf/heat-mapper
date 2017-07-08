@@ -76,7 +76,9 @@ def get_nearby_images(time, thresh=default_time_record_threshold):
         to_save = images_list[min_idx:]
     else:
         to_save = images_list[min_idx:max_idx]
+    # to_save = [(t, im.astype(np.float16)) for t, im in to_save]
     return to_save
+
 
 splat_times = np.array([])
 def onsplat(time):
