@@ -111,7 +111,7 @@ def check_splatter(images):
 # Main thread loop. Grabs the latest few frames, and checks them for splatter.
 # When it finds splatter, call on_splatter().
 # Repeat.
-def thread_loop(latest_img, on_splatter=lambda x: print('Splatter at t={}'.format(x)) ):
+def thread_loop(latest_img, on_splatter):
     last_time = 0
     while True:
         frames, times = grab_frames(last_time)
@@ -132,7 +132,7 @@ def start_thread(on_splatter=None):
     if on_splatter:
         th = threading.Thread(target=thread_loop, args=[latest_img, on_splatter])
     else:
-        th = threading.Thread(target=thread_loop, args=[latest_img])
+        th = threading.Thread(target=thread_loop, args=[latest_img, lambda x: print('Splatter at t={}'.format(x))])
     th.setDaemon(True)
     th.start()
     return latest_img
