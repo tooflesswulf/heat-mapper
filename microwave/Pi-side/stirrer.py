@@ -31,6 +31,7 @@ class StirrerControl:
     def write(self, st):
         self.ser.write(st.encode())
 
+    # Dunno why this works, but it does.
     def isReady(self):
         return self.getCurrentPos()[0]==98
 
