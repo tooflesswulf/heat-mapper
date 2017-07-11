@@ -28,11 +28,11 @@ def conv_celsius(temps):
 
 # Creates a circle mask with some radius and center.
 def cmask(center, radius, array_like):
-  a,b = center
-  nx,ny = array_like.shape
-  y,x = np.ogrid[-a:nx-a,-b:ny-b]
-  mask = x*x + y*y <= radius*radius
-  return mask
+    a, b = center
+    nx, ny = array_like.shape
+    y, x = np.ogrid[-a:nx-a,-b:ny-b]
+    mask = x*x + y*y <= radius*radius
+    return mask
 
 
 class ObjectStorer(object):
