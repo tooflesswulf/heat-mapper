@@ -6,8 +6,8 @@ import time
 import threading
 import sys
 
-img_store_loc = 'chicken/'
-fname = 'tomato'
+img_store_loc = 'spin_sto_loc/'
+fname = 'meatball'
 
 try:
     msg = sys.argv[1]
