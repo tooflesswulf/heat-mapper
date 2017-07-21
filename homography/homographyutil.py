@@ -2,6 +2,8 @@ import numpy as np
 import cv2
 from sklearn.cluster import KMeans
 from matplotlib.colors import rgb_to_hsv
+import matplotlib.pyplot as plt
+
 
 # Generates a rotation matrix for some angle theta.
 # @arg: theta - the angle to rotate by
@@ -10,6 +12,7 @@ def rot_mat(theta):
     c = np.cos(theta)
     s = np.sin(theta)
     return np.array([[c,-s],[s,c]])
+
 
 # Converts lines in a (rho, theta) format to a point-slope form.
 # @arg: lines - an array of lines. Has shape (n, 2)
@@ -23,6 +26,7 @@ def pts_rt2xy(lines):
 
     newlines = np.dstack([pt, n]).transpose(1,2,0)
     return newlines
+
 
 # Find the best intersecting point of many lines.
 # @param lines - an array of lines in (rho, theta) format
@@ -41,6 +45,7 @@ def get_intersection(lines):
         q += q_i
     return np.matmul(np.linalg.pinv(r), q).reshape(2)
 
+
 # Finds the edges of a mask.
 # @param ms - the mask to find the edges of
 # @param nlargest - only find edges of the n largest masks to reduce the effect of noise.
@@ -58,6 +63,7 @@ def get_mask_edges(ms, nlargest=2, dilate_size=(3,3)):
     edges = cv2.Canny(ms,0,1)
     edges = cv2.dilate(edges, np.ones(dilate_size))
     return edges
+
 
 # Finds the intersection between a set of lines and an image. It selects only pixels close enough to any line
 #  in <lines>; all other pixels are set to 0.  Also, it will label the pixels according to how the lines are labeled.
@@ -84,6 +90,7 @@ def render_lines_on_image(edges, avglines, line_width = 1):
         for i in np.argwhere(dists < line_width):
             dummy_im[y, x] = i+1
     return dummy_im
+
 
 # Returns the ratio of the distance of the detected top and bottom of the cans to the vanishing point.
 # @param dummy_im - the image with labeled lines.
@@ -114,6 +121,7 @@ def get_endpt_ratios(dummy_im, avglines, vp):
 
         endpt_list.append(endpts)
     return ratios, np.array(endpt_list)
+
 
 # Wraps up many functions into one function call to get the ratio and vanishing point of a mask of the cans.
 # @param ms - the mask to operate on
@@ -146,8 +154,9 @@ def get_ratios_from_mask(ms, imtype, debug=False):
     dummy_im = render_lines_on_image(edges, avglines, line_width=lw)
     ratios, endpts = get_endpt_ratios(dummy_im, avglines, vp)
     if debug:
-        return ratios, vp, (edges, lines, labels, endpts)
-    return ratios, vp
+        return ratios, vp, endpts, (edges, lines, labels)
+    return ratios, vp, endpts
+
 
 # Creates a mask for a visual image of the orange cans.
 def vis_can_mask(visimg):
@@ -160,10 +169,12 @@ def vis_can_mask(visimg):
     ms = ms.astype(np.uint8)
     return ms
 
+
 # Creates a mask for the lepton image of the cold cans.
 def lept_can_mask(leptimg):
     ret, thresh = cv2.threshold(leptimg.astype(np.uint8), 0, 1, cv2.THRESH_OTSU + cv2.THRESH_BINARY_INV)
     return thresh
+
 
 # Creates a splice of a mask centered on a particular label such that the label fills the new image.
 # Also returns the splice's location and details.
@@ -172,6 +183,7 @@ def zoom_on_label(labeled_mask, label):
     minx, miny = np.amin(locs, axis=0)
     maxx, maxy = np.amax(locs, axis=0)
     return labeled_mask[minx-5:5+maxx, miny-5:5+maxy], (minx, maxx), (miny, maxy)
+
 
 def get_tile_corners(labeled_mask):
     corners = []
@@ -186,6 +198,7 @@ def get_tile_corners(labeled_mask):
 
         corners.append(corn_pts + [miny-5, minx-5])
     return np.array(corners)
+
 
 # Creats a mask for the visual image of the 6-tile calibration device.
 def vis_tile_mask(visimg, return_labels=True):
@@ -207,6 +220,7 @@ def vis_tile_mask(visimg, return_labels=True):
     if return_labels:
         return markers * cleanmask
     return cleanmask
+
 
 # Creates a mask for the lepton image of the 6-tile calibration device.
 def lept_tile_mask(leptimg, return_labels=True):
@@ -232,6 +246,7 @@ def lept_tile_mask(leptimg, return_labels=True):
             labeled_mask[markers==i] = 1
 
     return labeled_mask
+
 
 # Orders a bunch of points given some x-divisions and y-divisions.
 # returns the order that would make the points follow a pattern like:
@@ -260,11 +275,12 @@ def classify_pts(pts, xdivs, ydivs):
                     break
     return np.array(order, dtype=int)
 
+
 # Determines the order of the squares and also the order of the squares.
 # @param init_pts - a (6,4,2) array that represents each square(6) and their corners(4,2).
 # @returns: order(6) - the order that the squares should go in.
 # @returns: sq_orders(6,4) - the order that the corners should go in. Each square has its own order of 4.
-def align(init_pts, ref_pt, imshape, return_order=False):
+def align(init_pts, ref_pt, imshape):
     xrange = imshape[1]
     yrange = imshape[0]
 
@@ -287,6 +303,7 @@ def align(init_pts, ref_pt, imshape, return_order=False):
 
     return order, sq_orders
 
+
 # Parses the orders and points to align the 
 def match_orders(points, square_orders, order):
     sortord = order[order!=-1]
@@ -296,14 +313,50 @@ def match_orders(points, square_orders, order):
         new_points.append(pts[sqo])
     return np.array(new_points)
 
+
 class HomographyGen:
-    def __init__(self, vis_vanish, lept_vanish, vis_ratio, lept_ratio, vis_pts, lept_pts):
-        self.can_height = 147.34# mm
+    def __init__(self, vis_can_img, lept_can_img, vis_tile_img, lept_tile_img, debug=True):
+        corns = get_tile_corners(vis_tile_mask(vis_tile_img))
+        assert corns.shape == (6,4,2), 'Error in generating tile corners on visual image.'
+        if debug:
+            plt.subplot(221)
+            plt.scatter(*corns.reshape(-1, 2).T, c='r')
+            plt.imshow(vis_tile_img)
+        vp = corns
+
+        vis_mask = vis_can_mask(vis_can_img)
+        vis_ratios, vis_vp, endpts = get_ratios_from_mask(vis_mask, imtype='vis')
+        if debug:
+            plt.subplot(222)
+            plt.scatter(*vis_vp)
+            plt.scatter(*endpts.T)
+            plt.imshow(vis_can_img)
+
+        vr, vv = np.mean(vis_ratios), vis_vp
+
+        corns = get_tile_corners(lept_tile_mask(lept_tile_img)) / 2
+        if debug:
+            plt.subplot(223)
+            plt.scatter(*corns.reshape(-1, 2).T, c='r')
+            plt.imshow(lept_tile_img)
+        lp = corns
+
+        lep_ratios, lep_vp, endpts = get_ratios_from_mask(lept_can_mask(lept_can_img), imtype='lept')
+        if debug:
+            plt.subplot(224)
+            plt.scatter(*lep_vp)
+            plt.scatter(*endpts.T)
+            plt.imshow(lept_can_img)
+        lr, lv = np.mean(lep_ratios), lep_vp
+        self.value_init(vis_vp, lep_vp, vr, lr, vp, lp)
+
+    def value_init(self, vis_vanish, lept_vanish, vis_ratio, lept_ratio, vis_pts, lept_pts):
+        can_height = 147.34# mm
 
         self.vv = vis_vanish.T
         self.lv = lept_vanish.T
-        self.vf = vis_ratio * self.can_height
-        self.lf = lept_ratio * self.can_height
+        self.vf = vis_ratio * can_height
+        self.lf = lept_ratio * can_height
 
         vis_shape = (480,640)
         lept_shape = (120,160)
