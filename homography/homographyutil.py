@@ -6,8 +6,6 @@ import matplotlib.pyplot as plt
 
 
 # Generates a rotation matrix for some angle theta.
-# @arg: theta - the angle to rotate by
-# @return: mat - the 2x2 rotation matrix.
 def rot_mat(theta):
     c = np.cos(theta)
     s = np.sin(theta)
@@ -46,14 +44,14 @@ def get_intersection(lines):
     return np.matmul(np.linalg.pinv(r), q).reshape(2)
 
 
-# Finds the edges of a mask.
+# Finds the edges of a mask. Only finds the edges of the n largest blobs and also thickens the lines by some amount.
 # @param ms - the mask to find the edges of
 # @param nlargest - only find edges of the n largest masks to reduce the effect of noise.
 # @param dilate_size - returns lines of some width, to help the line-finder do its job better.
 # @return: edges - An image similar to the mask, but with only the edges.
 def get_mask_edges(ms, nlargest=2, dilate_size=(3,3)):
     ret, markers = cv2.connectedComponents(ms)
-    _, counts = np.unique(markers, return_counts=True)
+    u, counts = np.unique(markers, return_counts=True)
     counts[0] = 0
 
     ms = np.zeros_like(ms)
@@ -105,22 +103,21 @@ def get_endpt_ratios(dummy_im, avglines, vp):
     endpt_list = []
     for lab, (rho ,theta) in zip(u, avglines):
         pts = np.argwhere(dummy_im == lab)
-        # rho, theta = lines[ix]
-        rot_pts = np.matmul(pts, rot_mat(-theta))
-        minx = np.amin(rot_pts[:,0])
-        maxx = np.amax(rot_pts[:,0])
-        y = np.mean(rot_pts[:,1])
-        pts2 = np.array([(minx, y), (maxx, y)])
-        endpts = np.matmul(pts2, rot_mat(theta))
-        endpts = endpts[:,[1,0]]
+        # rot_pts = np.matmul(pts, rot_mat(-theta))
+        # minx = np.amin(rot_pts[:,0])
+        # maxx = np.amax(rot_pts[:,0])
+        # y = np.mean(rot_pts[:,1])
+        # pts2 = np.array([(minx, y), (maxx, y)])
+        # endpts = np.matmul(pts2, rot_mat(theta))
+        # endpts = endpts[:,[1,0]]
 
-        dists = np.linalg.norm(endpts - vp.T, axis=1)
+        dists = np.linalg.norm(pts - vp.T, axis=1)
 
         d1, d2 = np.amin(dists), np.amax(dists)
         ratios.append(1/(1-d1/d2))
 
-        endpt_list.append(endpts)
-    return ratios, np.array(endpt_list)
+        # endpt_list.append(endpts)
+    return ratios#, np.array(endpt_list)
 
 
 # Wraps up many functions into one function call to get the ratio and vanishing point of a mask of the cans.
@@ -152,18 +149,18 @@ def get_ratios_from_mask(ms, imtype, debug=False):
         avglines.append(np.mean(lines[labels==lab], axis=0))
 
     dummy_im = render_lines_on_image(edges, avglines, line_width=lw)
-    ratios, endpts = get_endpt_ratios(dummy_im, avglines, vp)
+    ratios = get_endpt_ratios(dummy_im, avglines, vp)
     if debug:
-        return ratios, vp, endpts, (edges, lines, labels)
-    return ratios, vp, endpts
+        return ratios, vp, (edges, lines, labels, dummy_im)
+    return ratios, vp
 
 
 # Creates a mask for a visual image of the orange cans.
 def vis_can_mask(visimg):
-    hsv_im = rgb_to_hsv(visimg)
+    hsv_im = cv2.cvtColor(visimg, cv2.COLOR_RGB2HSV)
     m1 = .0 < hsv_im[...,0]  # Emperically determined `hue` values for orange.
-    m2 = hsv_im[...,0] < .08
-    m3 = hsv_im[...,1] > .3  # Minimum saturation.
+    m2 = hsv_im[...,0] < .08*255
+    m3 = hsv_im[...,1] > .3*255  # Minimum saturation.
     ms = m1 & m2 & m3
 
     ms = ms.astype(np.uint8)
@@ -187,16 +184,16 @@ def zoom_on_label(labeled_mask, label):
 
 def get_tile_corners(labeled_mask):
     corners = []
-    for label in np.unique(labeled_mask)[1:]:
-        roi, (minx, maxx), (miny, maxy) = zoom_on_label(labeled_mask, label)
-        
-        im, contours, hierarchy = cv2.findContours(roi.astype(np.uint8),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-    
-        epsilon = 0.1*cv2.arcLength(contours[0],True)
-        corn_pts = cv2.approxPolyDP(contours[0],epsilon,True)
+    im, contours, hierarchy = cv2.findContours(labeled_mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for cnt in contours:
+        epsilon = 0.1*cv2.arcLength(cnt,True)
+        corn_pts = cv2.approxPolyDP(cnt,epsilon,True)
         corn_pts = corn_pts.reshape(4,2)
 
-        corners.append(corn_pts + [miny-5, minx-5])
+        corners.append(corn_pts)
+
+    print(len(corners))
+
     return np.array(corners)
 
 
@@ -224,12 +221,11 @@ def vis_tile_mask(visimg, return_labels=True):
 
 # Creates a mask for the lepton image of the 6-tile calibration device.
 def lept_tile_mask(leptimg, return_labels=True):
-    img = cv2.resize(leptimg, (0,0), fx=2, fy=2)
-    img2 = img.copy()
+    # img = cv2.resize(leptimg, (0,0), fx=2, fy=2)
+    img = leptimg.copy()
 
-    img2[img2 < np.nanmean(img2)] = np.nan
-    img2[img2 < np.nanmean(img2)] = np.nan
-    mask = ~np.isnan(img2)
+    first_mask = img > np.mean(img)
+    mask = img > np.mean(img[first_mask])
 
     ret, markers = cv2.connectedComponents(mask.astype(np.uint8))
 
@@ -262,17 +258,32 @@ def classify_pts(pts, xdivs, ydivs):
         ub = np.concatenate([divs, [np.inf]], axis=0)
         return zip(lb, ub)
     
+    # order = []
+    # for yl, yu in gen_upper_lower_bounds(ydivs):
+    #     for xl, xu in gen_upper_lower_bounds(xdivs):
+    #         order.append(-1)
+    #         for k, pt in enumerate(pts):
+    #             xpt = pt[...,0]
+    #             ypt = pt[...,1]
+    #             tot = (xl<xpt) & (xpt<xu) & (yl<ypt) & (ypt<yu)
+    #             if np.all(tot):
+    #                 order[-1] = k
+    #                 break
+
     order = []
-    for yl, yu in gen_upper_lower_bounds(ydivs):
-        for xl, xu in gen_upper_lower_bounds(xdivs):
-            order.append(-1)
-            for k, pt in enumerate(pts):
+    for k, pt in enumerate(pts):
+        order.append(-1)
+        counter = 0
+        for yl, yu in gen_upper_lower_bounds(ydivs):
+            for xl, xu in gen_upper_lower_bounds(xdivs):
                 xpt = pt[...,0]
                 ypt = pt[...,1]
                 tot = (xl<xpt) & (xpt<xu) & (yl<ypt) & (ypt<yu)
                 if np.all(tot):
-                    order[-1] = k
+                    order[-1] = counter
                     break
+                counter += 1
+
     return np.array(order, dtype=int)
 
 
@@ -288,13 +299,13 @@ def align(init_pts, ref_pt, imshape):
     shift = init_pts - center
     targ_ang = np.pi/2
     tx, ty = ref_pt - center
-    M = rot_mat(targ_ang - np.arctan2(ty, tx))
+    M = rot_mat(np.arctan2(ty, tx) - targ_ang)
     shift = np.matmul(shift, M)
     
     ydiv = [yrange/8, -yrange/8]
     xdiv = [0]
     order = classify_pts(shift, xdiv, ydiv)
-        
+
     sq_orders = []
     for pts in shift:
         zeroed = pts-np.mean(pts, axis=-2)
@@ -304,59 +315,89 @@ def align(init_pts, ref_pt, imshape):
     return order, sq_orders
 
 
-# Parses the orders and points to align the 
-def match_orders(points, square_orders, order):
-    sortord = order[order!=-1]
-
-    new_points = []
-    for pts, sqo in zip(points[sortord], square_orders[sortord]):
-        new_points.append(pts[sqo])
-    return np.array(new_points)
-
-
 class HomographyGen:
     def __init__(self, vis_can_img, lept_can_img, vis_tile_img, lept_tile_img, debug=True):
-        corns = get_tile_corners(vis_tile_mask(vis_tile_img))
-        assert corns.shape == (6,4,2), 'Error in generating tile corners on visual image.'
-        if debug:
-            plt.subplot(221)
-            plt.scatter(*corns.reshape(-1, 2).T, c='r')
-            plt.imshow(vis_tile_img)
-        vp = corns
+        failed = []
+        error_msgs = []
+        if debug: plt.subplot(221)
+        try:
+            corns = get_tile_corners(vis_tile_mask(vis_tile_img))
+            assert corns.shape == (6,4,2), 'Error in generating tile corners on visual image.'
+            vp = corns
+            if debug:
+                plt.scatter(*corns.reshape(-1, 2).T, c='r')
+                plt.imshow(vis_tile_img)
+        except Exception as e:
+            failed.append('visual tiles')
+            error_msgs.append(e)
+            if debug:
+                plt.imshow(vis_tile_mask(vis_tile_img))
 
-        vis_mask = vis_can_mask(vis_can_img)
-        vis_ratios, vis_vp, endpts = get_ratios_from_mask(vis_mask, imtype='vis')
-        if debug:
-            plt.subplot(222)
-            plt.scatter(*vis_vp)
-            plt.scatter(*endpts.T)
-            plt.imshow(vis_can_img)
+        if debug: plt.subplot(222)
+        try:
+            vis_ratios, vis_vp, extra = get_ratios_from_mask(vis_can_mask(vis_can_img), imtype='vis', debug=True)
+            edges, lines, labels, dummy_im = extra
+            vr, vv = np.mean(vis_ratios), vis_vp
+            if debug:
+                for pt, n in pts_rt2xy(lines):
+                    ln = pt + [[1000], [-1000]]*n
+                    plt.plot(*ln.T, c='r')
+                plt.scatter(*vis_vp, zorder=10000)
+                plt.imshow(vis_can_img)
+        except Exception as e:
+            failed.append('visual cans')
+            error_msgs.append(e)
+            if debug:
+                plt.imshow(vis_can_mask(vis_can_img))
 
-        vr, vv = np.mean(vis_ratios), vis_vp
+        if debug: plt.subplot(223)
+        try:
+            corns = get_tile_corners(lept_tile_mask(lept_tile_img))
+            assert corns.shape == (6,4,2), 'Error in generating tile corners on lepton image.'
+            lp = corns
+            if debug:
+                plt.scatter(*corns.reshape(-1, 2).T, c='r')
+                plt.imshow(lept_tile_img)
+        except Exception as e:
+            failed.append('lepton tiles')
+            error_msgs.append(e)
+            if debug:
+                plt.imshow(lept_tile_mask(lept_tile_img))
 
-        corns = get_tile_corners(lept_tile_mask(lept_tile_img)) / 2
-        if debug:
-            plt.subplot(223)
-            plt.scatter(*corns.reshape(-1, 2).T, c='r')
-            plt.imshow(lept_tile_img)
-        lp = corns
+        if debug: plt.subplot(224)
+        try:
+            lep_ratios, lep_vp, extra = get_ratios_from_mask(lept_can_mask(lept_can_img), imtype='lept', debug=True)
+            edges, lines, labels, dummy_im = extra
+            lr, lv = np.mean(lep_ratios), lep_vp
+            if debug:
+                for pt, n in pts_rt2xy(lines):
+                    ln = pt + [[1000], [-1000]]*n
+                    plt.plot(*ln.T, c='r')
+                plt.scatter(*lep_vp, zorder=10000)
+                plt.imshow(lept_can_img)
+        except Exception as e:
+            failed.append('lepton cans')
+            error_msgs.append(e)
+            if debug:
+                plt.imshow(lept_can_mask(lept_can_img))
 
-        lep_ratios, lep_vp, endpts = get_ratios_from_mask(lept_can_mask(lept_can_img), imtype='lept')
-        if debug:
-            plt.subplot(224)
-            plt.scatter(*lep_vp)
-            plt.scatter(*endpts.T)
-            plt.imshow(lept_can_img)
-        lr, lv = np.mean(lep_ratios), lep_vp
+        if failed:
+            # print('The following images failed:')
+            print('Failure in: ' + ', '.join(failed) + '.')
+            print('Only reporting the first error.')
+            raise error_msgs[0]
+
         self.value_init(vis_vp, lep_vp, vr, lr, vp, lp)
 
     def value_init(self, vis_vanish, lept_vanish, vis_ratio, lept_ratio, vis_pts, lept_pts):
-        can_height = 147.34# mm
+        # can_height = 147.34# mm
 
         self.vv = vis_vanish.T
         self.lv = lept_vanish.T
-        self.vf = vis_ratio * can_height
-        self.lf = lept_ratio * can_height
+        # self.vf = vis_ratio * can_height
+        # self.lf = lept_ratio * can_height
+        self.vf = 425
+        self.lf = 450
 
         vis_shape = (480,640)
         lept_shape = (120,160)
@@ -364,12 +405,36 @@ class HomographyGen:
         vis_order, vis_square_order = align(vis_pts, vis_vanish, vis_shape)
         lept_order, lept_square_order = align(lept_pts, lept_vanish, lept_shape)
 
-        del_mask = (vis_order==-1) | (lept_order==-1)
-        vis_order[del_mask] = -1
-        lept_order[del_mask] = -1
+        vpts = []
+        lpts = []
+        for i in range(1+np.amax(np.concatenate([vis_order, lept_order]))):
+            vispos = np.argwhere(vis_order == i)
+            leptpos = np.argwhere(lept_order == i)
 
-        self.vpts = match_orders(vis_pts, vis_square_order, vis_order)
-        self.lpts = match_orders(lept_pts, lept_square_order, lept_order)
+            if vispos.shape[0] != 1 or leptpos.shape[0] != 1: continue
+            vispos = vispos[0,0]
+            leptpos = leptpos[0,0]
+
+            for j in range(1+np.amax(np.concatenate([vis_square_order[vispos], lept_square_order[leptpos]]))):
+                vis_squarepos = np.argwhere(vis_square_order[vispos] == j)
+                lept_squarepos = np.argwhere(lept_square_order[leptpos] == j)
+                if len(vis_squarepos) != 1 or len(lept_squarepos) != 1: continue
+                vis_squarepos = vis_squarepos[0,0]
+                lept_squarepos = lept_squarepos[0,0]
+
+                # print(leptpos, lept_squarepos, lept_pts[leptpos,lept_squarepos])
+                vpts.append(vis_pts[vispos,vis_squarepos])
+                lpts.append(lept_pts[leptpos, lept_squarepos])
+
+        # del_mask = (vis_order==-1) | (lept_order==-1)
+        # vis_order[del_mask] = -1
+        # lept_order[del_mask] = -1
+
+        self.vpts = np.array(vpts)
+        self.lpts = np.array(lpts)
+
+        # self.vpts = match_orders(vis_pts, vis_square_order, vis_order)
+        # self.lpts = match_orders(lept_pts, lept_square_order, lept_order)
     
     def send(self, h, return_success=False):
         lept_shifted = self.lf/(self.lf - h) * (self.lpts-self.lv) + self.lv

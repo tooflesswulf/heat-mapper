@@ -1,6 +1,7 @@
 #include <iostream>
 #include <unistd.h>
 #include <LeptonFrameGrabber.h>
+#include "markovTimeTools.h"
 
 using std::cout;
 using std::endl;
@@ -31,11 +32,11 @@ int main(int argc, char *argv[])
 	cout<<"Now grabbing frames..."<<endl;
 
 	// for(int i=0;i<100;i++) {
-	while(true){
+	// while(true){
 		vector<uint16_t> img=lfg.GrabImage();
-	}
+	// }
 
-	cout<<"Done grabbing 100 images to "<< fname <<".dat"<<endl;
+	cout<<"Done grabbing 1 images to "<< fname <<".dat"<<endl;
 	cout<<"Frame rate was "<<lfg.getLeptonFrameRate()<<" fps."<<endl;
 
 

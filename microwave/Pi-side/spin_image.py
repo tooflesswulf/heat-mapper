@@ -7,7 +7,7 @@ import threading
 import sys
 
 img_store_loc = 'spin_sto_loc/'
-fname = 'meatball'
+fname = 'pullpork'
 
 try:
     msg = sys.argv[1]
@@ -64,8 +64,6 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
     # img_thread(image)
     key = cv2.waitKey(1) & 0xFF
 
-    img_thread(image)
-
     # show the frame
     if show:
         cv2.imshow("Frame", image)
@@ -78,6 +76,8 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
     cur_pos -= 100
     s.waitReady()
     time.sleep(2)
+
+    img_thread(image)
 
     # clear the stream in preparation for the next frame
     rawCapture.truncate(0)
